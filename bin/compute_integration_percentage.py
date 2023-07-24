@@ -36,7 +36,7 @@ def compute_integration_percentage(target_info, alignment_dir):
             if read.has_tag('XA'):
                 continue
             
-            if int(read.get_tag('AS')) < 35:
+            if int(read.get_tag('AS')) < 30:
                 continue
 
             # Determine if the selected read maps to the cargo or wildtype amplicon
@@ -71,6 +71,10 @@ def compute_integration_percentage(target_info, alignment_dir):
             # Create SeqRecord
             seq_record = SeqRecord(Seq(seq), id=read.qname, description="",
                                    letter_annotations={"phred_quality": qual})
+            
+            print(attL_umis)
+            print(attR_umis)
+            print(beacon_umis)
 
             if read_mapped_to_attL:
                 attL_umis.add(umi)

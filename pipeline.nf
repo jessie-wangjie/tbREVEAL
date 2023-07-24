@@ -30,26 +30,26 @@ process ADAPTER_AND_POLY_G_TRIM {
 
 
 process ALIGN_READS {
-    publishDir "${params.outdir}/${params.sample_name}/initial_alignment/"
+    publishDir "${params.outdir}/${params.sample_name}/"
 
     input:
         path reference
         tuple path(fastq1_file), path(fastq2_file)
 
     output:
-        tuple path("output_sorted.bam"), path("output_sorted.bam.bai")
+        tuple path("initial_alignment.bam"), path("initial_alignment.bam.bai")
 
     script:
         """
         minimap2 -ax sr -t 32 ${reference} ${fastq1_file} ${fastq2_file} \
         | samtools view -@ 8 -b - \
-        | samtools sort -@ 8 -o output_sorted.bam -
-        samtools index output_sorted.bam
+        | samtools sort -@ 8 -o initial_alignment.bam -
+        samtools index initial_alignment.bam
         """
 }
 
 process GET_TARGET_INFORMATION {
-    publishDir "${params.outdir}/${params.sample_name}/target_info/"
+    publishDir "${params.outdir}/${params.sample_name}/"
     input:
         path metadata_fn
         val attp_reg
@@ -71,6 +71,7 @@ process EXTRACT_TARGET_READS {
         tuple path(fastq1_file), path(fastq2_file)
     output:
         path "extracted_reads"
+        path "read_counts_per_site.csv"
     
     script:
     """
@@ -105,7 +106,6 @@ process ALIGN_TARGET_READS {
 }
 
 process MEASURE_INTEGRATION {
-    publishDir "${params.outdir}/${params.sample_name}/"
     input:
         path target_info
         path alignment_dir
@@ -127,7 +127,6 @@ process GATHER_QC_INFO {
         path fastq_dir
     output:
         path 'qc_summary.csv'
-        path 'probe_read_counts.csv'
     script:
     """
     gather_qc_stats.py --json_file ${json_file} --fastq_dir ${fastq_dir}
@@ -188,9 +187,9 @@ workflow {
     target_information = GET_TARGET_INFORMATION(params.metadata, params.ATTP_REG, params.ATTP_PRIME)
     fastq_dir = EXTRACT_TARGET_READS(target_information, align_reads_output, trim_outputs[0])
     amplicons_dir = GENERATE_AMPLICONS(target_information)
-    alignment_dir = ALIGN_TARGET_READS(target_information, fastq_dir, amplicons_dir)
+    alignment_dir = ALIGN_TARGET_READS(target_information, fastq_dir[0], amplicons_dir)
     att_sequence_dirs = MEASURE_INTEGRATION(target_information, alignment_dir)
-    GATHER_QC_INFO(trim_outputs[1], fastq_dir)
+    GATHER_QC_INFO(trim_outputs[1], fastq_dir[0])
     cs2_attL_attR_dirs = RUN_CS2_FOR_INDELS(att_sequence_dirs[1], att_sequence_dirs[2], amplicons_dir, target_information)
     indel_tables = GET_INDEL_INFO_FROM_CS2_OUTPUT(cs2_attL_attR_dirs[0], cs2_attL_attR_dirs[1])
     COMBINE_INTEGRATION_AND_INDEL_INFO(att_sequence_dirs[0],indel_tables[0],indel_tables[1])

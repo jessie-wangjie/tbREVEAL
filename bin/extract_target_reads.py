@@ -22,23 +22,33 @@ def extract_reads(target_info, bam_file, window):
     # Open the BAM file
     bam = pysam.AlignmentFile(bam_file, "rb")
 
-
     target_info_df = pd.read_csv(target_info)
 
+    # Prepare a dictionary to hold ID and read counts
+    read_counts = {}
+
     for index, row in target_info_df.iterrows():
-        position = row['start']
+        start_position = row['start']
+        end_position = row['end']
         chromosome = row['chromosome']
         id = row['id']
-        start = position - window
-        end = position + window
+        start = start_position - window
+        end = end_position + window
 
         print('Extracting reads for ' + id + '...')
-        reads_to_extract = set()
         
         command = f'samtools view {bam_file} {chromosome}:{start}-{end} -b | samtools fastq -N - -o {fastq_dir}/{id}.fastq'
         subprocess.run(command, shell=True)
 
+        # Count the number of reads in the fastq file using Biopython's SeqIO
+        count = sum(1 for _ in SeqIO.parse(f'{fastq_dir}/{id}.fastq', 'fastq'))
+        read_counts[id] = count
+
     bam.close()
+
+    # Save the read counts to a CSV file
+    read_counts_df = pd.DataFrame(list(read_counts.items()), columns=['id', 'read_count'])
+    read_counts_df.to_csv('read_counts_per_site.csv', index=False)
 
 
 if __name__ == "__main__":
