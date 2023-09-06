@@ -142,22 +142,22 @@ def get_target_info(metadata_fn, attp_reg_seq, attp_prime_seq):
             cur.execute(query, [id])
             result = cur.fetchone()
 
+            len_cargo_to_include = 20
+            len_genomic_seq_to_include = 20
+
             if result:
                 genome_build, chr, start, end, central_dinucleotide_start, central_nucleotides_seq, strand,closest_gene,threat_tier,overlapping_feature = result
                 reference_path = f'/data/references/hg38.fa'
                 cargo_reference_path = f'/data/references/PL1113.fa'
                 if strand == '+':
-                    cryptic_b_reg_command = f'samtools faidx {reference_path} {chr}:{start}-{central_dinucleotide_start + len(central_nucleotides_seq) - 1}'
-                    cryptic_b_prime_command = f'samtools faidx {reference_path} {chr}:{central_dinucleotide_start + len(central_nucleotides_seq)}-{end}'
-                    cryptic_b_prime_command_extended = f'samtools faidx {reference_path} {chr}:{central_dinucleotide_start + len(central_nucleotides_seq)}-{end+23}'
+                    cryptic_b_reg_command = f'samtools faidx {reference_path} {chr}:{start-len_genomic_seq_to_include}-{central_dinucleotide_start + len(central_nucleotides_seq) - 1}'
+                    cryptic_b_prime_command = f'samtools faidx {reference_path} {chr}:{central_dinucleotide_start + len(central_nucleotides_seq)}-{end+len_genomic_seq_to_include}'
                 else:
-                    cryptic_b_reg_command = f'samtools faidx {reference_path} {chr}:{start}-{central_dinucleotide_start - 1}'
-                    cryptic_b_prime_command = f'samtools faidx {reference_path} {chr}:{central_dinucleotide_start}-{end}'
-                    cryptic_b_prime_command_extended = f'samtools faidx {reference_path} {chr}:{central_dinucleotide_start}-{end + 23}'
+                    cryptic_b_reg_command = f'samtools faidx {reference_path} {chr}:{start-len_genomic_seq_to_include}-{central_dinucleotide_start - 1}'
+                    cryptic_b_prime_command = f'samtools faidx {reference_path} {chr}:{central_dinucleotide_start}-{end+len_genomic_seq_to_include}'
             
             cryptic_b_reg_sequence = ''.join(subprocess.check_output(cryptic_b_reg_command, shell=True).decode(sys.stdout.encoding).split('\n')[1:]).upper()
             cryptic_b_prime_sequence = ''.join(subprocess.check_output(cryptic_b_prime_command, shell=True).decode(sys.stdout.encoding).split('\n')[1:]).upper()
-            cryptic_b_prime_sequence_extended = ''.join(subprocess.check_output(cryptic_b_prime_command_extended, shell=True).decode(sys.stdout.encoding).split('\n')[1:]).upper()
 
             if strand == '-':
                 cryptic_b_reg_sequence, cryptic_b_prime_sequence = cryptic_b_prime_sequence, cryptic_b_reg_sequence
@@ -168,28 +168,26 @@ def get_target_info(metadata_fn, attp_reg_seq, attp_prime_seq):
             cryptic_AttL_sequence = (cryptic_b_reg_sequence + attp_prime_seq).upper()
             cryptic_AttR_sequence = (attp_reg_seq + cryptic_b_prime_sequence).upper()
 
-            # cryptic_beacon = (cryptic_b_reg_sequence + cryptic_b_prime_sequence_extended)
-
-            # # store cargo sequence so we can search for subsequence locations
-            # with open(cargo_reference_path, 'r') as f:
-            #     cargo_sequence = ''.join(line.strip() for line in f if not line.startswith('>')).upper()
+            # store cargo sequence so we can search for subsequence locations
+            with open(cargo_reference_path, 'r') as f:
+                cargo_sequence = ''.join(line.strip() for line in f if not line.startswith('>')).upper()
             
-            # cargo_pprime_end_loc = cargo_sequence.find(attp_prime_seq) + len(attp_prime_seq)
-            # cargo_preg_start_loc = cargo_sequence.find(attp_reg_seq)
+            cargo_pprime_end_loc = cargo_sequence.find(attp_prime_seq) + len(attp_prime_seq)
+            cargo_preg_start_loc = cargo_sequence.find(attp_reg_seq)
 
-            # cargo_20bp_before_preg = cargo_sequence[cargo_preg_start_loc-20:cargo_preg_start_loc]
-            # cargo_20bp_after_pprime = cargo_sequence[cargo_pprime_end_loc:cargo_pprime_end_loc+20]
+            cargo_20bp_before_preg = cargo_sequence[cargo_preg_start_loc-len_cargo_to_include:cargo_preg_start_loc]
+            cargo_20bp_after_pprime = cargo_sequence[cargo_pprime_end_loc:cargo_pprime_end_loc+len_cargo_to_include]
 
-            # cryptic_AttL_sequence = cryptic_AttL_sequence + cargo_20bp_after_pprime
-            # cryptic_AttR_sequence = cargo_20bp_before_preg + cryptic_AttR_sequence
+            cryptic_AttL_sequence = cryptic_AttL_sequence + cargo_20bp_after_pprime
+            cryptic_AttR_sequence = cargo_20bp_before_preg + cryptic_AttR_sequence
 
             length_of_dinucleotide = len(central_nucleotides_seq)
 
-            position_of_attL_dinucleotide_lower = len(cryptic_b_reg_sequence) - length_of_dinucleotide + 1
-            position_of_attL_dinucleotide_upper = len(cryptic_b_reg_sequence)
+            position_of_attL_dinucleotide_lower = len_genomic_seq_to_include + len(cryptic_b_reg_sequence) - length_of_dinucleotide + 1
+            position_of_attL_dinucleotide_upper = len_genomic_seq_to_include + len(cryptic_b_reg_sequence)
 
-            position_of_attR_dinucleotide_lower = len(attp_reg_seq) - length_of_dinucleotide + 1
-            position_of_attR_dinucleotide_upper = len(attp_reg_seq)
+            position_of_attR_dinucleotide_lower = len_cargo_to_include + len(attp_reg_seq) - length_of_dinucleotide + 1
+            position_of_attR_dinucleotide_upper = len_cargo_to_include + len(attp_reg_seq)
 
             attL_quant_lower_bound = position_of_attL_dinucleotide_lower - 3
             attL_quant_upper_bound = position_of_attL_dinucleotide_upper + 3
@@ -206,6 +204,7 @@ def get_target_info(metadata_fn, attp_reg_seq, attp_prime_seq):
             gene_strand = [el.split(",")[1].strip() for el in gene_list]
             gene_distance = [el.split(",")[2].strip() for el in gene_list]
 
+
             if strand in gene_strand:
                 same_strand="True"
             else:
@@ -214,6 +213,9 @@ def get_target_info(metadata_fn, attp_reg_seq, attp_prime_seq):
             gene_name = "/".join(gene_name)
             gene_strand = "/".join(gene_strand)
             gene_distance = "/".join(gene_distance)
+
+            print(gene_list)
+            print(gene_name, gene_strand,gene_distance)
 
             ids.append(id)
             chrs.append(chr)
@@ -231,6 +233,7 @@ def get_target_info(metadata_fn, attp_reg_seq, attp_prime_seq):
             gene_distances.append(gene_distance)
             same_strands.append(same_strand)
     
+    
     data = {
         'id': ids,
         'chromosome': chrs,
@@ -246,7 +249,7 @@ def get_target_info(metadata_fn, attp_reg_seq, attp_prime_seq):
         'overlapping_feature': overlapping_features,
         'gene_name': gene_names,
         'gene_strand': gene_strands,
-        'gene_distance': gene_distance
+        'gene_distance': gene_distances
     }
 
     df = pd.DataFrame(data)

@@ -16,7 +16,7 @@ def collate_integration_files(parent_dir, project_name):
     
     # Specify columns that don't change from folder to folder
     unchanged_columns = ["Target", "Closest Gene Name", "Gene Strand", 
-                         "Distance from Gene", "Same Strand as Cryptic", "Threat Tier"]
+                         "Distance from Gene", "Overlapping Feature", "Same Strand as Cryptic", "Threat Tier"]
 
     # Initialize empty dataframes
     collated_indel_df = pd.DataFrame()
@@ -24,17 +24,19 @@ def collate_integration_files(parent_dir, project_name):
 
     for subfolder in subfolders:
         # Obtain sample name from subfolder name
-        sample_name = os.path.basename(subfolder).split("ds")[0]
+        sample_name = os.path.basename(subfolder).split("_L1_ds")[0]
 
         # Load the csv file
         filepath = os.path.join(subfolder, "integration_and_indel_stats.csv")
         df = pd.read_csv(filepath)
 
+        df.columns = [column.strip() for column in df.columns]
+
         # Change column names and create additional dataframe for "Integration Percentage" columns
         for column in df.columns:
             if column not in unchanged_columns:
                 df.rename(columns={column: f"{sample_name} {column}"}, inplace=True)
-                if "Integration Percentage" in column:
+                if "Integration Percentage" in column or "Number of AttL" in column or "Number of AttR" in column or "Number of Beacon" in column:
                     if collated_integration_percentage_df.empty:
                         collated_integration_percentage_df = df[unchanged_columns + [f"{sample_name} {column}"]]
                     else:
@@ -52,8 +54,12 @@ def collate_integration_files(parent_dir, project_name):
             collated_indel_df = collated_indel_df.drop(columns=[column])
 
     # Reorder columns to put 'Target' at the beginning and the rest of unchanged_columns at the end
-    columns = ["Target"] + [col for col in collated_indel_df.columns if col not in unchanged_columns and col != "Target"] + [col for col in unchanged_columns if col != "Target"]
-    collated_indel_df = collated_indel_df[columns]
+    indel_column_order = ["Target"] + [col for col in collated_indel_df.columns if col not in unchanged_columns and col != "Target"] + [col for col in unchanged_columns if col != "Target"]
+    collated_indel_df = collated_indel_df[indel_column_order]
+
+    integration_column_order = ["Target"] + [col for col in collated_integration_percentage_df.columns if col not in unchanged_columns and col != "Target" and "Integration" not in col] + [col for col in collated_integration_percentage_df.columns if col not in unchanged_columns and col != "Target" and "Integration" in col] + [col for col in unchanged_columns if col != "Target"]
+    collated_integration_percentage_df = collated_integration_percentage_df[integration_column_order]
+
 
     # Save the collated dataframes to new csv files
     collated_indel_df.to_csv(f"{project_name}_indel_results.csv", index=False)
@@ -72,7 +78,7 @@ def collate_reads_per_site_files(parent_dir, project_name):
 
     for subfolder in subfolders:
         # Obtain sample name from subfolder name
-        sample_name = os.path.basename(subfolder).split("ds")[0]
+        sample_name = os.path.basename(subfolder).split("_L1_ds")[0]
 
         # Load the csv file
         filepath = os.path.join(subfolder, "read_counts_per_site.csv")
@@ -102,7 +108,7 @@ def collate_qc_files(parent_dir, project_name):
 
     for subfolder in subfolders:
         # Obtain sample name from subfolder name
-        sample_name = os.path.basename(subfolder).split("ds")[0]
+        sample_name = os.path.basename(subfolder).split("_L1_ds")[0]
 
         # Load the csv file
         filepath = os.path.join(subfolder, "qc", "qc_summary.csv")

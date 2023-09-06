@@ -29,10 +29,10 @@ def run_cs2(amplicon_dir,target_info, junction_type):
                 chr = "attL_amplicon"
                 amplicon_sequence_command = f'samtools faidx {amplicon_path} {chr}'
                 amplicon_sequence = ''.join(subprocess.check_output(amplicon_sequence_command, shell=True).decode(sys.stdout.encoding).split('\n')[1:]).upper()
-                subprocess.run(["CRISPResso", "--fastq_r1", fastq_fn, "--amplicon_seq", amplicon_sequence, "--amplicon_name",id,"--name", id + "_attL","--write_detailed_allele_table","--bam_output","--quantification_window_coordinates",quant_window_range,"--exclude_bp_from_left","0","--exclude_bp_from_right","0"])
+                subprocess.run(["CRISPResso", "--fastq_r1", fastq_fn, "--amplicon_seq", amplicon_sequence, "--amplicon_name",id,"--name", id + "_attL","--write_detailed_allele_table","--bam_output","--quantification_window_coordinates",quant_window_range,"--exclude_bp_from_left","0","--exclude_bp_from_right","0","--amplicon_min_alignment_score","5"])
                 os.makedirs(os.path.join("CRISPResso_on_" + id + "_attL", "cs2_alignment_html"), exist_ok=True)
                 path_to_cs2_output = "CRISPResso_on_" + id + "_attL"
-                allele2html_command = "allele2html.py -f %s -r %s -b %s" % (path_to_cs2_output+'/', id, quant_window)
+                allele2html_command = "/data/tbHCA/bin/utils/allele2html.py -f %s -r %s -b %s" % (path_to_cs2_output+'/', id, quant_window)
                 subprocess.call(allele2html_command, shell=True)
         
         pattern = "CRISPResso_on_*_attL"
@@ -68,10 +68,10 @@ def run_cs2(amplicon_dir,target_info, junction_type):
                 chr = "attR_amplicon"
                 amplicon_sequence_command = f'samtools faidx {amplicon_path} {chr}'
                 amplicon_sequence = ''.join(subprocess.check_output(amplicon_sequence_command, shell=True).decode(sys.stdout.encoding).split('\n')[1:]).upper()
-                subprocess.run(["CRISPResso", "--fastq_r1", fastq_fn, "--amplicon_seq", amplicon_sequence, "--amplicon_name",id,"--name",id + "_attR","--write_detailed_allele_table","--bam_output","--quantification_window_coordinates",quant_window_range,"--exclude_bp_from_left","0","--exclude_bp_from_right","0"])
+                subprocess.run(["CRISPResso", "--fastq_r1", fastq_fn, "--amplicon_seq", amplicon_sequence, "--amplicon_name",id,"--name",id + "_attR","--write_detailed_allele_table","--bam_output","--quantification_window_coordinates",quant_window_range,"--exclude_bp_from_left","0","--exclude_bp_from_right","0","--amplicon_min_alignment_score","5"])
                 os.makedirs(os.path.join("CRISPResso_on_" + id + "_attR", "cs2_alignment_html"), exist_ok=True)
                 path_to_cs2_output = "CRISPResso_on_" + id + "_attR"
-                allele2html_command = "allele2html.py -f %s -r %s -b %s" % (path_to_cs2_output+'/', id, quant_window)
+                allele2html_command = "/data/tbHCA/bin/utils/allele2html.py -f %s -r %s -b %s" % (path_to_cs2_output+'/', id, quant_window)
                 subprocess.call(allele2html_command, shell=True)
         pattern = "CRISPResso_on_*_attR"
         destination_folder = "cs2_attR"

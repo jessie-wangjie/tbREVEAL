@@ -41,9 +41,11 @@ process ALIGN_READS {
 
     script:
         """
-        minimap2 -ax sr -t 32 ${reference} ${fastq1_file} ${fastq2_file} \
-        | samtools view -@ 8 -b - \
-        | samtools sort -@ 8 -o initial_alignment.bam -
+        minimap2 -ax sr -t 16 ${reference} ${fastq1_file} ${fastq2_file} > initial_alignment.sam 
+        samtools view -@ 16 -b initial_alignment.sam > initial_alignment.bam
+        samtools sort -@ 16 initial_alignment.bam > initial_alignment_sorted.bam
+        mv initial_alignment_sorted.bam initial_alignment.bam
+        rm initial_alignment.sam
         samtools index initial_alignment.bam
         """
 }

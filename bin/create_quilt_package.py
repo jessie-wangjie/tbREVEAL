@@ -30,59 +30,46 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Process run_id argument')
 
     parser.add_argument('--run_id', type=str, help='run id')
+    parser.add_argument('--parent_dir', type=str, help='folder where all results are contained (usually after running collate script)')
 
     args = parser.parse_args()
 
     run_id = args.run_id
+    parent_folder = args.parent_dir
  
 
-    for f in glob.glob(os.path.join("*L1_ds*", "integration_and_indel_stats.csv")):
-        # preview.append(os.path.basename(f))
-        sample_name = f.split('/')[0].split("_L1_ds")[0]
+    for f in glob.glob(os.path.join(f"{parent_folder}/*L1_ds*", "integration_and_indel_stats.csv")):
+        sample_name = f.split('/')[1].split("L1_ds")[0].strip('_')
         quilt_path = 'integration_stats' + '/' + sample_name + '_integration_stats.csv'
         p.set(quilt_path, f)
     
-    for f in glob.glob("*L1_ds*/att*_alignments_html/*.html"):
-        sample_name = f.split('/')[0].split("_L1_ds")[0]
+    for f in glob.glob(f"{parent_folder}/*L1_ds*/att*_alignments_html/*.html"):
+        sample_name = f.split('/')[1].split("L1_ds")[0].strip('_')
         junction_type = f.split('/')[-1].split('_')[1].split('.')[0]
         site = f.split('/')[-1].split('_')[1].split('.')[1]
         quilt_path = 'attL_attR_alignment_files/'  + sample_name + '/' + junction_type  + '_alignments/' + site + '_' + junction_type + '.html'
         p.set(quilt_path, f)
     
-    for f in glob.glob("*L1_ds*/qc/*.csv"):
-        sample_name = f.split('/')[0].split("_L1_ds")[0]
-        qc_filename = f.split('/')[-1].split('.')[0]
-        quilt_path = 'qc' + '/' + sample_name + '/' + qc_filename + '.csv'
-        p.set(quilt_path, f)
+    # for f in glob.glob(f"{parent_folder}/*L1_ds*/qc/*.csv"):
+    #     sample_name = f.split('/')[1].split("L1_ds")[0].strip('_')
+    #     qc_filename = f.split('/')[-1].split('.')[0]
+    #     quilt_path = 'qc' + '/' + sample_name + '/' + qc_filename + '.csv'
+    #     p.set(quilt_path, f)
 
-    for f in glob.glob("*L1_ds*/cs2_output/cs2_att*/CRISPResso_on*/cs2_alignment_html/*.html"):
-        print(f)
-        sample_name = f.split('/')[0].split("_L1_ds")[0]
+    for f in glob.glob(f"{parent_folder}/*L1_ds*/cs2_output/cs2_att*/CRISPResso_on*/cs2_alignment_html/*.html"):
+        sample_name = f.split('/')[1].split("L1_ds")[0].strip('_')
         junction_type = f.split('/')[-1].split('_')[1].split('.')[0]
         site = f.split('/')[-1].split('_')[1].split('.')[1]
         quilt_path = 'attL_attR_alignment_files/'  + sample_name + '/' + junction_type  + '_alignments/' + site + '_' + junction_type + '.html'
+        p.set(quilt_path, f)
+    
+    for f in glob.glob(f"{parent_folder}/{run_id}*.csv"):
+        quilt_path = f.split('/')[1]
         p.set(quilt_path, f)
         
-    # p.set("integration_stats/S4-down-350-rep1_integration_and_indel_stats.csv","S4-down-350-rep1_L1_ds.d22b471c136648e3abae0dd35a0ccb19/integration_and_indel_stats.csv")
-    # p.set_dir("fastq/" + pipeline_run_id[:-1], pipeline_run_id[:-1])
-
-    # # output package
-    # preview = ["platemap.json", "alignment_stats.json"]
-    # for f in glob.glob(os.path.join(input, "stats.*.csv")):
-    #     preview.append(os.path.basename(f))
-    #     p.set(os.path.join(pipeline_run_id, os.path.basename(f)), f)
-    
-    
-
-    # p.set(pipeline_run_id + "/qw_stats.csv", input + "/" + "qw_stats.csv")
-    # p.set(pipeline_run_id + "/" + pipeline_run_id + ".stats.xlsx", input + "/" + input + ".stats.xlsx")
-    # p.set(pipeline_run_id + "/platemap.json", input + "/platemap.json")
-    # p.set(pipeline_run_id + "/alignment_stats.json", input + "/alignment_stats.json")
-    # p.set(pipeline_run_id + "/status.txt", input + "/" + "status.txt")
-    # p.set_dir(pipeline_run_id + "/cs2_alignment_html", input + "/cs2_alignment_html/")
-    # p.set_meta({"Benchling Entry": entry_name, "Benchling URL": entry_url})
-    # pd.Series(preview).to_json(input + "/quilt_summarize.json", orient="records")
-    # p.set(pipeline_run_id + "/quilt_summarize.json", input + "/quilt_summarize.json")
+    for f in glob.glob(f"{parent_folder}/{run_id}*.xlsx"):
+        quilt_path = f.split('/')[1]
+        p.set(quilt_path, f)
 
     # Pushing a package to a remote registry
     with Capturing() as output:
