@@ -14,166 +14,157 @@ import sys
 import psycopg2
 
 
-def compute_integration_percentage(target_info, alignment_dir):
+import os
+import pandas as pd
+import pysam
+from Bio import SeqIO
+from Bio.Seq import Seq
+from Bio.SeqRecord import SeqRecord
+
+def compute_integration_percentage(target_info, alignment_dir, sample_name):
+    os.makedirs(f"{sample_name}_attL_extracted_reads", exist_ok=True)
+    os.makedirs(f"{sample_name}_attR_extracted_reads", exist_ok=True)
+    os.makedirs(f"{sample_name}_beacon_extracted_reads", exist_ok=True)
     
-    os.mkdir("attL_extracted_reads")
-    os.mkdir("attR_extracted_reads")
     target_info_df = pd.read_csv(target_info)
     integration_dict = {}
 
+    def get_umi(read):
+        return read.query_name
+    
+    def calculate_soft_clipped_indices(read):
+        start, end = 0, len(read.seq)
+        for i, (operation, length) in enumerate(read.cigartuples):
+            if i == 0 and operation == 4:
+                start += length
+            elif operation == 4:
+                end -= length
+        return start, end
+    
     for index, row in target_info_df.iterrows():
-        alignment_file = alignment_dir + '/' + row['id'] + '_alignment.sam'
-        alignment = pysam.AlignmentFile(alignment_file, "r")
-
-        attL_length = len(row['attL'])
-        attR_length = len(row['attR'])
-
-        attL_umis = set()
-        attR_umis = set()
-        beacon_umis = set()
-
-        partial_attL_umis = set()
-        complete_attL_umis = set()
-        cargo_attL_umis = set()
-
-        partial_attR_umis = set()
-        complete_attR_umis = set()
-        cargo_attR_umis = set()
-
+        alignment_file = f"{alignment_dir}/{row['id']}_alignment.sam"
+        
         attL_records = {}
         attR_records = {}
+        beacon_records = {}
 
-        for read in alignment:
-            # Ignore if there's supplementary alignment or unaligned
-            if read.flag == 2048 or read.flag == 2064 or read.flag == 4:
-                continue
+        categories = {
+            'partial_attL': set(), 'complete_attL': set(), 'cargo_attL': set(),
+            'partial_attR': set(), 'complete_attR': set(), 'cargo_attR': set(),
+            'partial_beacon': set(), 'complete_beacon': set(), 'wt': set()
+        }
 
-            # Determine if the selected read maps to the cargo or wildtype amplicon
-            read_mapped_to_attL = read.reference_name == 'attL_amplicon'
-            read_mapped_to_attR = read.reference_name == 'attR_amplicon'
-            read_mapped_to_beacon = read.reference_name == 'beacon_amplicon'
+        with pysam.AlignmentFile(alignment_file, "r") as alignment:
+            for read in alignment:
+                if read.flag in [2048, 2064, 4]:  # Supplementary, Secondary, or Unaligned
+                    continue
 
-            # Extract UMI from the read name
-            umi = read.query_name.split(":")[-1]
+                umi = get_umi(read)
+                start, end = calculate_soft_clipped_indices(read)
+                seq = read.seq[start:end]
+                qual = read.query_qualities[start:end]
+                
+                seq_record = SeqRecord(Seq(seq), id=read.qname, description="", letter_annotations={"phred_quality": qual})
+                alignment_start, alignment_end = read.reference_start + 1, read.reference_end + 1
 
-            # Calculate start and end using CIGAR string
-            start, end = 0, len(read.seq)
-            start_soft_clip = 0
-            end_soft_clip = 0
+                
+                rules = [
+                    (read.reference_name == 'attL_amplicon' and 'CAS' in row['id'] and alignment_start < 32 and alignment_end > 54, 
+                     ['partial_attL']),
+                    (read.reference_name == 'attL_amplicon' and 'CAS' in row['id'] and alignment_start < 32 and alignment_end > 69, 
+                     ['partial_attL', 'complete_attL']),
+                    (read.reference_name == 'attL_amplicon' and 'CAS' in row['id'] and alignment_start < 32 and alignment_end > 79, 
+                     ['partial_attL', 'complete_attL', 'cargo_attL']),
 
-            # measure softclipping in order to cleave off ends for preparation into cs2
-            for i, (operation, length) in enumerate(read.cigartuples):
-                #beginning of sequence is soft clip
-                if i == 0 and operation == 4:
-                    start_soft_clip = length
-                    start = start + start_soft_clip
-                # end of sequence is softclipped
-                elif i != 0 and operation == 4:
-                    end_soft_clip = length
-                    end = end - end_soft_clip
-            
+                    (read.reference_name == 'attR_amplicon' and 'CAS' in row['id'] and alignment_start < 30 and alignment_end > 57, 
+                     ['partial_attR']),
+                    (read.reference_name == 'attR_amplicon' and 'CAS' in row['id'] and alignment_start < 20 and alignment_end > 57, 
+                     ['partial_attR', 'complete_attR']),
+                    (read.reference_name == 'attR_amplicon' and 'CAS' in row['id'] and alignment_start < 10 and alignment_end > 57, 
+                     ['partial_attR', 'complete_attR', 'cargo_attR']),
 
-            # Now start and end should be the indices slicing the aligned part of the sequence
-            seq = read.seq[start:end]
-            qual = read.query_qualities[start:end]
+                    (read.reference_name == 'beacon_amplicon' and 'CAS' in row['id'] and ((alignment_start <= 21 and alignment_end < 66) or (alignment_start > 21 and alignment_end >= 66)), 
+                     ['partial_beacon']),
+                    (read.reference_name == 'beacon_amplicon' and 'CAS' in row['id'] and alignment_start <= 21 and alignment_end >= 66, 
+                     ['partial_beacon', 'complete_beacon']),
+                    
+                    # slightly different rule compared to CAS sites because cryptic B based on 46 bp attB and the beacon written is 38 bp
+                    # note the difference in alignment ends (15 bp versus 11 bp)
+                    (read.reference_name == 'attL_amplicon' and 'AA' in row['id'] and alignment_start < 12 and alignment_end > 34, 
+                     ['partial_attL']),
+                    (read.reference_name == 'attL_amplicon' and 'AA' in row['id'] and alignment_start < 12 and alignment_end > 45, 
+                     ['partial_attL', 'complete_attL']),
+                    (read.reference_name == 'attL_amplicon' and 'AA' in row['id'] and alignment_start < 12 and alignment_end > 55, 
+                     ['partial_attL', 'complete_attL', 'cargo_attL']),
 
-            # Create SeqRecord
-            seq_record = SeqRecord(Seq(seq), id=read.qname, description="",
-                                   letter_annotations={"phred_quality": qual})
-            
-            alignment_start = read.reference_start + 1
-            alignment_end = read.reference_end + 1
-            
-            if read_mapped_to_attL:
-                # partial attL (half way through P)
-                if alignment_start < 24 and alignment_end > 54: 
-                    partial_attL_umis.add(umi)
-                    # Only keep the record if this UMI hasn't been seen before for attL
-                    if umi not in attL_records:
-                        attL_records[umi] = seq_record
-                # complete attL
-                if alignment_start < 24 and alignment_end > 69:
-                    partial_attL_umis.add(umi)
-                    complete_attL_umis.add(umi)
-                # cargo
-                if alignment_start < 24 and alignment_end > 79:
-                    partial_attL_umis.add(umi)
-                    complete_attL_umis.add(umi)
-                    cargo_attL_umis.add(umi)
+                    (read.reference_name == 'attR_amplicon' and 'AA' in row['id'] and alignment_start < 30 and alignment_end > 57, 
+                     ['partial_attR']),
+                    (read.reference_name == 'attR_amplicon' and 'AA' in row['id'] and alignment_start < 20 and alignment_end > 57, 
+                     ['partial_attR', 'complete_attR']),
+                    (read.reference_name == 'attR_amplicon' and 'AA' in row['id'] and alignment_start < 10 and alignment_end > 57, 
+                     ['partial_attR', 'complete_attR', 'cargo_attR']),
 
-            elif read_mapped_to_attR:
-                # Only keep the record if this UMI hasn't been seen before for attR
-                # partial attR (half way through P)
-                if alignment_start < 37 and alignment_end > 47: 
-                    partial_attR_umis.add(umi)
-                    if umi not in attR_records:
-                        attR_records[umi] = seq_record
-                # complete attR
-                if alignment_start < 22 and alignment_end > 47:
-                    partial_attR_umis.add(umi)
-                    complete_attR_umis.add(umi)
-                # cargo
-                if alignment_start < 12 and alignment_end > 47:
-                    partial_attR_umis.add(umi)
-                    complete_attR_umis.add(umi)
-                    cargo_attR_umis.add(umi)
-            elif read_mapped_to_beacon:
-                beacon_umis.add(umi)
-            
-        alignment.close()
+                    (read.reference_name == 'beacon_amplicon' and 'AA' in row['id'] and ((alignment_start <= 1 and alignment_end < 39) or (alignment_start > 1 and alignment_end >= 39)), 
+                     ['partial_beacon']),
+                    (read.reference_name == 'beacon_amplicon' and 'AA' in row['id'] and alignment_start <= 1 and alignment_end >= 39, 
+                     ['partial_beacon', 'complete_beacon']),
 
-        # Write records to a FASTQ file
-        if len(attL_records.values()) > 0:
-            with open("attL_extracted_reads" + '/' + row['id'] + '_attL.fastq', "w") as attL_output_handle:
-                SeqIO.write(attL_records.values(), attL_output_handle, "fastq")
-        if len(attR_records.values()) > 0:
-            with open("attR_extracted_reads" + '/' + row['id'] + '_attR.fastq', "w") as attR_output_handle:
-                SeqIO.write(attR_records.values(), attR_output_handle, "fastq")
-
-        total_count = len(attL_umis) + len(attR_umis) + len(beacon_umis)
-
-        if total_count > 0:
-            partial_P_integration_percentage = (len(partial_attL_umis) + len(partial_attR_umis)) / total_count * 100
-            complete_P_integration_percentage = (len(complete_attL_umis) + len(complete_attR_umis)) / total_count * 100
-            cargo_P_integration_percentage = (len(cargo_attL_umis) + len(cargo_attR_umis)) / total_count * 100
-        else:
-            partial_P_integration_percentage = 0.0
-            complete_P_integration_percentage = 0.0
-            cargo_P_integration_percentage = 0.0
+                    (read.reference_name == 'wt_amplicon', ['wt'])
+                ]
 
 
+                for condition, cat_keys in rules:
+                    if condition:
+                        for key in cat_keys:
+                            # if read.query_name == 'M08748:37:000000000-L772W:1:1101:7707:8878:AGCCGATAT': 
+                            #     print(key)
+                            categories[key].add(umi)
+                            if 'attL' in key:
+                                attL_records[umi] = seq_record
+                            elif 'attR' in key:
+                                attR_records[umi] = seq_record 
+                            # only care about written beacon alignments, not cryptic beacons (aka regular genomic)
+                            elif 'beacon' in key and 'AA' in row['id']:
+                                beacon_records[umi] = seq_record                
+                    
+        for prefix, records in [(f'{sample_name}_attL', attL_records), (f'{sample_name}_attR', attR_records),(f'{sample_name}_beacon', beacon_records)]:
+            if records:
+                path = f"{prefix}_extracted_reads/{row['id']}_{prefix}.fastq"
+                SeqIO.write(records.values(), path, "fastq")
+
+        counts = {k: len(v) for k, v in categories.items()}
+        partial_total = sum([counts[key] for key in ['partial_attL', 'partial_attR', 'partial_beacon', 'wt']])
+        complete_P_total = sum([counts[key] for key in ['complete_attL', 'complete_attR', 'complete_beacon', 'wt']])
+        cargo_P_total = sum([counts[key] for key in ['cargo_attL', 'cargo_attR', 'complete_beacon', 'wt']])
         
-        gene_name = row['gene_name']
-        gene_strand = row['gene_strand']
-        gene_distance = row['gene_distance']
-        same_strand = row['same_strand']
-        threat_tier = row['threat_tier']
-        overlapping_feature = row['overlapping_feature']
-        num_attL_reads = str(len(attL_umis))
-        num_attL_partial_reads = str(len(partial_attL_umis))
-        num_attL_complete_reads = str(len(complete_attL_umis))
-        num_attL_cargo = str(len(cargo_attL_umis))
-        num_attR_partial_reads = str(len(partial_attR_umis))
-        num_attR_complete_reads = str(len(complete_attR_umis))
-        num_attR_cargo = str(len(cargo_attR_umis))
-        num_attR_reads = str(len(attR_umis))
-        num_beacon_reads = str(len(beacon_umis))
-        
-        integration_dict[row['id']] = (num_attL_reads, num_attL_partial_reads, num_attL_complete_reads, num_attL_cargo, num_attR_reads, num_attR_partial_reads, num_attR_complete_reads, num_attR_cargo, num_beacon_reads, partial_P_integration_percentage, complete_P_integration_percentage, cargo_P_integration_percentage,gene_name,gene_strand,gene_distance,same_strand,overlapping_feature,threat_tier)
+        def calc_percentage(numerator, denominator):
+            return (numerator / denominator * 100) if denominator > 0 else 0.0
 
-    return(integration_dict)
+        integration_dict[row['id']] = (
+            counts['wt'], counts['partial_attL'], counts['complete_attL'], counts['cargo_attL'],
+            counts['partial_attR'], counts['complete_attR'], counts['cargo_attR'], counts['partial_beacon'],counts['complete_beacon'],
+            calc_percentage(counts['partial_attL'] + counts['partial_attR'], partial_total),
+            calc_percentage(counts['complete_attL'] + counts['complete_attR'], complete_P_total),
+            calc_percentage(counts['cargo_attL'] + counts['cargo_attR'], cargo_P_total),
+            100 if 'CAS' in row['id'] else calc_percentage(counts['partial_beacon'] + counts['partial_attL'] + counts['partial_attR'], partial_total),
+            100 if 'CAS' in row['id'] else calc_percentage(counts['complete_beacon'] + counts['complete_attL'] + counts['complete_attR'], complete_P_total)
+        ) + tuple(row[key] for key in ['gene_name', 'gene_strand', 'gene_distance', 'same_strand', 'overlapping_feature', 'threat_tier'])
+
+    #print(integration_dict)
+
+    return integration_dict
 
 
-def write_integration_percentage(integration_dict):
+def write_integration_percentage(integration_dict, sample_name):
     # Open the CSV file in write mode
-    filename = 'integration_stats.csv'
+    filename = f'{sample_name}_integration_stats.csv'
     with open(filename, 'w') as file:
         # Write the header row
-        file.write('Target,Number of AttL reads,Number of AttL Partial Reads,Number of AttL Complete Reads,Number of AttL Cargo Reads,Number of AttR Reads,Number of AttR Partial Reads,Number of AttR Complete Reads,Number of AttR Cargo Reads,Number of Beacon reads,Partial P Integration Percentage,Complete P Integration Percentage,Cargo and P Integration Percentage,Closest Gene Name,Gene Strand,Distance from Gene,Same Strand as Cryptic,Overlapping Feature,Threat Tier\n')
+        file.write('Target,Number of WT Reads,Number of AttL Partial Reads,Number of AttL Complete Reads,Number of AttL Cargo Reads,Number of AttR Partial Reads,Number of AttR Complete Reads,Number of AttR Cargo Reads,Number of Partial Beacon Reads,Number of Complete Beacon Reads,Partial P Integration Percentage,Complete P Integration Percentage,Cargo and P Integration Percentage,Partial Beacon Integration,Complete Beacon Integration,Closest Gene Name,Gene Strand,Distance from Gene,Same Strand as Cryptic,Overlapping Feature,Threat Tier\n')
 
         # Write the data rows
         for key, value in integration_dict.items():
-            file.write(f'{key},{value[0]},{value[1]},{value[2]},{value[3]},{value[4]},{value[5]},{value[6]},{value[7]},{value[8]},{value[9]},{value[10]},{value[11]},{value[12]},{value[13]},{value[14]},{value[15]},{value[16]},{value[17]}\n')
+            file.write(f'{key},{value[0]},{value[1]},{value[2]},{value[3]},{value[4]},{value[5]},{value[6]},{value[7]},{value[8]},{value[9]},{value[10]},{value[11]},{value[12]},{value[13]},{value[14]},{value[15]},{value[16]},{value[17]},{value[18]},{value[19]}\n')
 
 
 if __name__ == "__main__":
@@ -182,9 +173,10 @@ if __name__ == "__main__":
 
     # Add the arguments
     parser.add_argument("--target_info", required=True, type=str, help="Metadata file")
-    parser.add_argument("--alignment_dir", required=True, type=str, help="Metadata file")
+    parser.add_argument("--alignment_dir", required=True, type=str, help="Alignment directory")
+    parser.add_argument("--sample_name", required=True, type=str, help="Sample name")
     # Parse the arguments
     args = parser.parse_args()
 
-    integration_dict = compute_integration_percentage(args.target_info, args.alignment_dir)
-    write_integration_percentage(integration_dict)
+    integration_dict = compute_integration_percentage(args.target_info, args.alignment_dir,args.sample_name)
+    write_integration_percentage(integration_dict,args.sample_name)

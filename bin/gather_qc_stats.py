@@ -4,9 +4,9 @@ import argparse
 import os
 import json
 
-def parse_data(json_file):
+def parse_data(json_file,sample_name):
 
-    output_fn = 'qc_summary.csv'
+    output_fn = f'{sample_name}_qc_summary.csv'
     # Load JSON data
     with open(json_file, 'r') as file:
         data = json.load(file)
@@ -43,6 +43,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Parse JSON file and count lines in FASTQ files.')
     parser.add_argument('--json_file', help='The JSON file to be parsed.')
     parser.add_argument('--fastq_dir', help='The directory containing the FASTQ files.')
+    parser.add_argument('--sample_name', help='The directory containing the FASTQ files.')
     args = parser.parse_args()
     
-    parse_data(args.json_file)
+    parse_data(args.json_file, args.sample_name)

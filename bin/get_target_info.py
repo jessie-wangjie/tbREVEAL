@@ -23,6 +23,7 @@ def get_target_info(metadata_fn, attp_reg_seq, attp_prime_seq):
     chrs = []
     starts = []
     ends = []
+    wts = []
     beacons = []
     attLs = []
     attRs = []
@@ -48,7 +49,7 @@ def get_target_info(metadata_fn, attp_reg_seq, attp_prime_seq):
 
             query = '''
             SELECT
-                bases, left_half, right_half, target_gene_name, direction_of_transcription
+                bases, left_half, right_half, spacer_table.jmin, target_gene_name, direction_of_transcription
             FROM
                 atg_atg AS atg_table
             JOIN 
@@ -64,8 +65,14 @@ def get_target_info(metadata_fn, attp_reg_seq, attp_prime_seq):
             '''
             cur.execute(query, [id])
             result = cur.fetchone()
+
+            len_cargo_to_include = 20
+            len_genomic_seq_to_include = 20
+
             if result:
-                bases, left_half, right_half, closest_gene, direction_of_transcription = result
+                bases, left_half, right_half, spacer_jmin_cutsite, closest_gene, direction_of_transcription = result
+                cargo_reference_path = f'/data/references/AAVG097.fa'
+                reference_path = f'/data/references/hg38.fa'
 
             chr = 'chr' + str(chr)
             
@@ -75,16 +82,32 @@ def get_target_info(metadata_fn, attp_reg_seq, attp_prime_seq):
             b_reg_sequence = bases[left_half_list[0]-1:left_half_list[1]+2]
             b_prime_sequence = bases[right_half_list[0]-1:right_half_list[1]]
 
+            wt_command = f'samtools faidx {reference_path} {chr}:{int(spacer_jmin_cutsite)}-{int(spacer_jmin_cutsite)+len(bases)}'
+
+            wt_sequence = ''.join(subprocess.check_output(wt_command, shell=True).decode(sys.stdout.encoding).split('\n')[1:]).upper()
             attL = (b_reg_sequence + attp_prime_seq).upper()
             attR = (attp_reg_seq + b_prime_sequence).upper()
+
+            # store cargo sequence so we can search for subsequence locations
+            with open(cargo_reference_path, 'r') as f:
+                cargo_sequence = ''.join(line.strip() for line in f if not line.startswith('>')).upper()
+            
+            cargo_pprime_end_loc = cargo_sequence.find(attp_prime_seq) + len(attp_prime_seq)
+            cargo_preg_start_loc = cargo_sequence.find(attp_reg_seq)
+
+            cargo_20bp_before_preg = cargo_sequence[cargo_preg_start_loc-len_cargo_to_include:cargo_preg_start_loc]
+            cargo_20bp_after_pprime = cargo_sequence[cargo_pprime_end_loc:cargo_pprime_end_loc+len_cargo_to_include]
+
+            attL = attL + cargo_20bp_after_pprime
+            attR = cargo_20bp_before_preg + attR
 
             length_of_dinucleotide = 2
 
             position_of_attL_dinucleotide_lower = len(b_reg_sequence) - length_of_dinucleotide + 1
             position_of_attL_dinucleotide_upper = len(b_reg_sequence)
 
-            position_of_attR_dinucleotide_lower = len(attp_reg_seq) - length_of_dinucleotide + 1
-            position_of_attR_dinucleotide_upper = len(attp_reg_seq)
+            position_of_attR_dinucleotide_lower = len_cargo_to_include + len(attp_reg_seq) - length_of_dinucleotide + 1
+            position_of_attR_dinucleotide_upper = len_cargo_to_include + len(attp_reg_seq)
 
             attL_quant_lower_bound = position_of_attL_dinucleotide_lower - 3
             attL_quant_upper_bound = position_of_attL_dinucleotide_upper + 3
@@ -102,6 +125,7 @@ def get_target_info(metadata_fn, attp_reg_seq, attp_prime_seq):
             chrs.append(chr)
             starts.append(start)
             ends.append(end)
+            wts.append(wt_sequence)
             beacons.append(bases)
             attLs.append(attL)
             attRs.append(attR)
@@ -148,7 +172,7 @@ def get_target_info(metadata_fn, attp_reg_seq, attp_prime_seq):
             if result:
                 genome_build, chr, start, end, central_dinucleotide_start, central_nucleotides_seq, strand,closest_gene,threat_tier,overlapping_feature = result
                 reference_path = f'/data/references/hg38.fa'
-                cargo_reference_path = f'/data/references/PL1113.fa'
+                cargo_reference_path = f'/data/references/AAVG097.fa'
                 if strand == '+':
                     cryptic_b_reg_command = f'samtools faidx {reference_path} {chr}:{start-len_genomic_seq_to_include}-{central_dinucleotide_start + len(central_nucleotides_seq) - 1}'
                     cryptic_b_prime_command = f'samtools faidx {reference_path} {chr}:{central_dinucleotide_start + len(central_nucleotides_seq)}-{end+len_genomic_seq_to_include}'
@@ -165,6 +189,7 @@ def get_target_info(metadata_fn, attp_reg_seq, attp_prime_seq):
                 cryptic_b_prime_sequence = reverse_complement(cryptic_b_prime_sequence)
 
             cryptic_beacon = (cryptic_b_reg_sequence + cryptic_b_prime_sequence).upper()
+            wt_sequence = cryptic_beacon
             cryptic_AttL_sequence = (cryptic_b_reg_sequence + attp_prime_seq).upper()
             cryptic_AttR_sequence = (attp_reg_seq + cryptic_b_prime_sequence).upper()
 
@@ -183,8 +208,8 @@ def get_target_info(metadata_fn, attp_reg_seq, attp_prime_seq):
 
             length_of_dinucleotide = len(central_nucleotides_seq)
 
-            position_of_attL_dinucleotide_lower = len_genomic_seq_to_include + len(cryptic_b_reg_sequence) - length_of_dinucleotide + 1
-            position_of_attL_dinucleotide_upper = len_genomic_seq_to_include + len(cryptic_b_reg_sequence)
+            position_of_attL_dinucleotide_lower = len_genomic_seq_to_include + (central_dinucleotide_start - start) + 1 
+            position_of_attL_dinucleotide_upper = len_genomic_seq_to_include + (central_dinucleotide_start - start) + length_of_dinucleotide
 
             position_of_attR_dinucleotide_lower = len_cargo_to_include + len(attp_reg_seq) - length_of_dinucleotide + 1
             position_of_attR_dinucleotide_upper = len_cargo_to_include + len(attp_reg_seq)
@@ -221,6 +246,7 @@ def get_target_info(metadata_fn, attp_reg_seq, attp_prime_seq):
             chrs.append(chr)
             starts.append(start)
             ends.append(end)
+            wts.append(wt_sequence)
             beacons.append(cryptic_beacon)
             attLs.append(cryptic_AttL_sequence)
             attRs.append(cryptic_AttR_sequence)
@@ -239,6 +265,7 @@ def get_target_info(metadata_fn, attp_reg_seq, attp_prime_seq):
         'chromosome': chrs,
         'start': starts,
         'end': ends,
+        'wt': wts,
         'beacon': beacons,
         'attL': attLs,
         'attR': attRs,

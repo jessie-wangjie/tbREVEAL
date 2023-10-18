@@ -38,17 +38,17 @@ if __name__ == "__main__":
     parent_folder = args.parent_dir
  
 
-    for f in glob.glob(os.path.join(f"{parent_folder}/*L1_ds*", "integration_and_indel_stats.csv")):
-        sample_name = f.split('/')[1].split("L1_ds")[0].strip('_')
-        quilt_path = 'integration_stats' + '/' + sample_name + '_integration_stats.csv'
-        p.set(quilt_path, f)
+    # for f in glob.glob(os.path.join(f"{parent_folder}/*L1_ds*", "integration_and_indel_stats.csv")):
+    #     sample_name = f.split('/')[1].split("L1_ds")[0].strip('_')
+    #     quilt_path = 'integration_stats' + '/' + sample_name + '_integration_stats.csv'
+    #     p.set(quilt_path, f)
     
-    for f in glob.glob(f"{parent_folder}/*L1_ds*/att*_alignments_html/*.html"):
-        sample_name = f.split('/')[1].split("L1_ds")[0].strip('_')
-        junction_type = f.split('/')[-1].split('_')[1].split('.')[0]
-        site = f.split('/')[-1].split('_')[1].split('.')[1]
-        quilt_path = 'attL_attR_alignment_files/'  + sample_name + '/' + junction_type  + '_alignments/' + site + '_' + junction_type + '.html'
-        p.set(quilt_path, f)
+    # for f in glob.glob(f"{parent_folder}/*L1_ds*/att*_alignments_html/*.html"):
+    #     sample_name = f.split('/')[1].split("L1_ds")[0].strip('_')
+    #     junction_type = f.split('/')[-1].split('_')[1].split('.')[0]
+    #     site = f.split('/')[-1].split('_')[1].split('.')[1]
+    #     quilt_path = 'attL_attR_alignment_files/'  + sample_name + '/' + junction_type  + '_alignments/' + site + '_' + junction_type + '.html'
+    #     p.set(quilt_path, f)
     
     # for f in glob.glob(f"{parent_folder}/*L1_ds*/qc/*.csv"):
     #     sample_name = f.split('/')[1].split("L1_ds")[0].strip('_')
@@ -56,18 +56,26 @@ if __name__ == "__main__":
     #     quilt_path = 'qc' + '/' + sample_name + '/' + qc_filename + '.csv'
     #     p.set(quilt_path, f)
 
-    for f in glob.glob(f"{parent_folder}/*L1_ds*/cs2_output/cs2_att*/CRISPResso_on*/cs2_alignment_html/*.html"):
+    for f in glob.glob(f"{parent_folder}/*/cs2_output/cs2_*/CRISPResso_on*/cs2_alignment_html/*.html"):
         sample_name = f.split('/')[1].split("L1_ds")[0].strip('_')
         junction_type = f.split('/')[-1].split('_')[1].split('.')[0]
         site = f.split('/')[-1].split('_')[1].split('.')[1]
-        quilt_path = 'attL_attR_alignment_files/'  + sample_name + '/' + junction_type  + '_alignments/' + site + '_' + junction_type + '.html'
+        quilt_path = 'attL_attR_beacon_alignment_files/'  + sample_name + '/' + junction_type  + '_alignments/' + site + '_' + junction_type + '.html'
         p.set(quilt_path, f)
     
-    for f in glob.glob(f"{parent_folder}/{run_id}*.csv"):
+    # for f in glob.glob(f"{parent_folder}/{run_id}*.csv"):
+    #     quilt_path = f.split('/')[1]
+    #     p.set(quilt_path, f)
+        
+    for f in glob.glob(f"{parent_folder}/*.xlsx"):
         quilt_path = f.split('/')[1]
         p.set(quilt_path, f)
-        
-    for f in glob.glob(f"{parent_folder}/{run_id}*.xlsx"):
+    
+    for f in glob.glob(f"{parent_folder}/*.bam*"):
+        quilt_path = f.split('/')[1]
+        p.set(quilt_path, f)
+    
+    for f in glob.glob(f"{parent_folder}/*.fa"):
         quilt_path = f.split('/')[1]
         p.set(quilt_path, f)
 

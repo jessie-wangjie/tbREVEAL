@@ -23,13 +23,21 @@ def create_amplicon_files(target_info):
         attL_amplicon = row['attL']
         attR_amplicon = row['attR']
         beacon_amplicon = row['beacon']
+        wt_amplicon = row['wt']
         print(row['id'], beacon_amplicon)
-        records = [
-            SeqRecord(Seq(attL_amplicon), id="attL_amplicon", description=""),
-            SeqRecord(Seq(attR_amplicon), id="attR_amplicon", description=""),
-            SeqRecord(Seq(beacon_amplicon), id="beacon_amplicon", description="")
-            #SeqRecord(Seq(wildtype_amplicon), id="wildtype_amplicon", description="")
-        ]
+        if 'CAS' in row['id']:
+            records = [
+                SeqRecord(Seq(attL_amplicon), id="attL_amplicon", description=""),
+                SeqRecord(Seq(attR_amplicon), id="attR_amplicon", description=""),
+                SeqRecord(Seq(beacon_amplicon), id="beacon_amplicon", description=""),
+            ]
+        elif 'AA' in row['id']:
+            records = [
+                SeqRecord(Seq(attL_amplicon), id="attL_amplicon", description=""),
+                SeqRecord(Seq(attR_amplicon), id="attR_amplicon", description=""),
+                SeqRecord(Seq(beacon_amplicon), id="beacon_amplicon", description=""),
+                SeqRecord(Seq(wt_amplicon), id="wt_amplicon", description="")
+            ]
 
         SeqIO.write(records, output_fasta_fn, "fasta")
 

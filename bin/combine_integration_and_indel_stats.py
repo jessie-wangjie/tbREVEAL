@@ -21,7 +21,10 @@ def merge_tables(attL_indel_table, attR_indel_table, integration_stats, output_f
     df = df.sort_values('Input Reads', ascending=False)
     df = df.drop_duplicates(subset='Amplicon', keep='first')
 
+    df = df.reset_index(drop=True)
+
     print(df)
+    print(df3)
 
     # merge the new dataframe with df3
     merged_df = pd.merge(df, df3, how='right', left_on='Amplicon', right_on='Target')
@@ -36,8 +39,8 @@ def merge_tables(attL_indel_table, attR_indel_table, integration_stats, output_f
     
     merged_df.fillna({'Target':0, 'Input Reads':0, 'Unmodified Reads':0, 'Modified Reads':0, 'Unmodified%':0, 
                       'Modified%':0, 'Insertions':0, 'Deletions':0, 'Substitutions':0, 'Insertion%':0, 
-                      'Deletion%':0, 'Substitution%':0, 'Indels':0,'Indel%': 0,'Number of AttL reads':0,
-                      'Number of AttR Reads':0,'Number of Beacon reads':0,'Integration Percentage':0}, inplace=True)
+                      'Deletion%':0, 'Substitution%':0, 'Indels':0,'Indel%': 0,'Number of WT Reads':0, 'Number of AttL reads':0,
+                      'Number of AttR Reads':0,'Number of Beacon reads':0,'Beacon Integration':0,'Integration Percentage':0}, inplace=True)
 
     merged_df.to_csv(output_fn,index=False)
     

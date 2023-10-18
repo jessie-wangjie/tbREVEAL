@@ -13,10 +13,10 @@ import subprocess
 import sys
 import psycopg2
 
-def extract_reads(target_info, bam_file, window):
+def extract_reads(target_info, bam_file, window, sample_name):
 
     # Specify the directory path
-    fastq_dir = 'extracted_reads'
+    fastq_dir = f'{sample_name}_extracted_reads'
     os.makedirs(fastq_dir, exist_ok=True)
 
     # Open the BAM file
@@ -37,7 +37,7 @@ def extract_reads(target_info, bam_file, window):
 
         print('Extracting reads for ' + id + '...')
         
-        command = f'samtools view {bam_file} {chromosome}:{start}-{end} -b | samtools fastq -N - -o {fastq_dir}/{id}.fastq'
+        command = f'samtools view {bam_file} {chromosome}:{start}-{end} -b | samtools fastq -N - > {fastq_dir}/{id}.fastq'
         subprocess.run(command, shell=True)
 
         # Count the number of reads in the fastq file using Biopython's SeqIO
@@ -48,7 +48,7 @@ def extract_reads(target_info, bam_file, window):
 
     # Save the read counts to a CSV file
     read_counts_df = pd.DataFrame(list(read_counts.items()), columns=['id', 'read_count'])
-    read_counts_df.to_csv('read_counts_per_site.csv', index=False)
+    read_counts_df.to_csv(f'{sample_name}_read_counts_per_site.csv', index=False)
 
 
 if __name__ == "__main__":
@@ -59,8 +59,9 @@ if __name__ == "__main__":
     parser.add_argument("--target_info", required=True, type=str, help="Metadata file")
     parser.add_argument("--window_size", type=int, default=1000, help="The size of the window around the position of interest")
     parser.add_argument("--bam_file", required=True, type=str, help="The name of the BAM file")
+    parser.add_argument("--sample_name", required=True, type=str, help="Sample name")
     
     # Parse the arguments
     args = parser.parse_args()
 
-    extract_reads(args.target_info, args.bam_file, args.window_size)
+    extract_reads(args.target_info, args.bam_file, args.window_size, args.sample_name)
