@@ -1,0 +1,3 @@
+sample_name,fastq_dir,probe_list,group
+AAV-only-pure-up-1,input/reads/AAV-only-pure-up-1_L1_ds.a996065a72544b49a26c0b9748df73ab,input/probe_info_files/20230329-final_panel_up.csv,control
+PGI-pure-up-1,input/reads/PGI-pure-up-1_L1_ds.5b1160c22c0046c988f8ad22cec7a5b9,input/probe_info_files/20230329-final_panel_up.csv,treated
