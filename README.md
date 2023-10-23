@@ -28,7 +28,7 @@ If you wish to directly use a package manager like conda or mamba, there is an e
 There are multiple ways to run the pipeline. The easiest way is to directly edit the nextflow.config file. By default, Nextflow will use this file to find the input files. 
 
 ```
-nextflow run ../tbHCA/pipeline.nf -with-docker hca
+nextflow run pipeline.nf -with-docker hca
 ```
 
 Alternatively, you can give Nextflow the input files at runtime as such:
@@ -45,7 +45,21 @@ nextflow run pipeline.nf \
 
 Right now, use relative paths when specifying inputs. I am currently working to add support for both absolute and relative paths. 
 
-## Metadata file
+## Samplesheet
+
+HCA utilizes a samplesheet, which contains information about all samples within a particular project. An example samplesheet is in the examples folder. 
+
+The samplesheet should have the following columns: sample_name,fastq_dir,probe_list,group
+
+sample_name is just the name of your sample, can be anything you want
+
+fastq_dir is the relative path to your FASTQ files. 
+
+probe_list is the relative path to the probe information file. More information about that can be seen below. 
+
+group is specifying whether the sample is a control, treated sample, or anything else. 
+
+## Probe information file
 
 One of the key files is the probe information sheet. This file should be in .csv format and looks like:
 
@@ -59,6 +73,8 @@ One of the key files is the probe information sheet. This file should be in .csv
 | 1          | 184150972| 184151092| CAS002-UP| 1     | -      | good | CTTACACTACTTGCTTCAATGACTTTGAACTTGGCGTGCCGTTCTGTGGCTTTGCTGCTGTCTGAATCACATGCTTTTGCCTGCATTACCAAGCAGGGCTTGGAGCCCAGTCTCAGGAGG | 120 | 50.83 | no             | CAS002 | chr1       | 184151093    | 184151093   | 1        |
 
 The most important columns are: Target, Chromosome, Start, Stop, Strand. The pipeline should work with just these columns.  
+
+An example probe information file is in the examples folder.  
 
 ## Benchling 
 
