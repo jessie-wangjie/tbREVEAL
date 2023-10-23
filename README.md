@@ -25,7 +25,13 @@ If you wish to directly use a package manager like conda or mamba, there is an e
 
 # Quick start
 
-There are multiple ways to run the pipeline. The easiest way is to directly edit the nextflow.config file. By default, Nextflow will use this file to find the input files. Alternatively, you can give Nextflow the input files at runtime as such:
+There are multiple ways to run the pipeline. The easiest way is to directly edit the nextflow.config file. By default, Nextflow will use this file to find the input files. 
+
+```
+nextflow run ../tbHCA/pipeline.nf -with-docker hca
+```
+
+Alternatively, you can give Nextflow the input files at runtime as such:
 
 ```
 nextflow run pipeline.nf \
