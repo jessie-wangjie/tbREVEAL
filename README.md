@@ -11,71 +11,35 @@ The following section lists the dependencies for this project.
 
 ## Packages
 
-Make sure you have the following packages installed:
+The easiest way to get all dependencies needed is by using Docker. 
 
-- [minimap2 2.26](https://github.com/lh3/minimap2)
-- [bwa 0.7.17](https://github.com/lh3/bwa)
-- [CRISPResso2 2.2.12](https://github.com/pinellolab/CRISPResso2)
-- [samtools 1.17](https://github.com/samtools/samtools)
-- [pysam 0.21.0](https://pypi.org/project/pysam/)
-- [biopython 1.81](https://pypi.org/project/biopython/)
-- [glob2 0.7](https://pypi.org/project/glob2/)
-- [pandas 2.0.3](https://pypi.org/project/pandas/)
-- [psycopg2 2.9.6](https://pypi.org/project/psycopg2/)
-- [nextflow 23.04.1](https://github.com/nextflow-io/nextflow)
-- [fastp 0.23.4](https://github.com/OpenGene/fastp)
-- [dotenv 1.0.0](https://github.com/motdotla/dotenv)
+First, clone the repo. 
 
-Note that the versions listed are the versions when I made the pipeline, but they will probably run in future versions as well (unless there's a major change to one of them, causing dependency issues.) 
+Second, install Docker on your instance. 
 
-All of these can be installed via conda (or mamba, as I prefer):
+Once docker is installed, you can build the Docker image by first navigating to the top of the code repository, then: 
 
-```
-conda create -n HCA -c bioconda -c conda-forge -c anaconda -c bioconda minimap2 bwa crispresso2 samtools pysam biopython glob2 pandas psycopg2 nextflow fastp python-dotenv
-```
-
-OR 
-
-
-```
-mamba create -n HCA -c bioconda -c conda-forge -c anaconda -c bioconda minimap2 bwa crispresso2 samtools pysam biopython glob2 pandas psycopg2 nextflow fastp python-dotenv
-```
-
-then
-
-```
-conda activate HCA
-```
+If you wish to directly use a package manager like conda or mamba, there is an environment.yml file that you can utilize. 
 
 # Quick start
 
-After cloning the repo, you can run the pipeline using:
+There are multiple ways to run the pipeline. The easiest way is to directly edit the nextflow.config file. By default, Nextflow will use this file to find the input files. Alternatively, you can give Nextflow the input files at runtime as such:
 
 ```
 nextflow run pipeline.nf \
---r1 R1.fastq.gz \
---r2 R2.fastq.gz \
---metadata metadata.csv \
+--samplesheet samplesheet.csv \
 --reference hg38.fa \
 --outdir my_output_directory \
---sample_name my_sample_name
+--deduplication_method LOOSE \
+--collapse_condition CARGO \
+--project_name my_project_name
 ```
 
-Make sure to use absolute paths when referencing a filename. A full example may look like this:
-
-```
-nextflow run pipeline.nf \
---r1 /data/reads/JM_Custom_TB000174c_20230613/S4-up-350-rep1_L1_ds.1258ae405c464bd1b100534fdd5e2699/S4-up-350-rep1_S1_L001_R1_001.fastq.gz \
---r2 /data/reads/JM_Custom_TB000174c_20230613/S4-up-350-rep1_L1_ds.1258ae405c464bd1b100534fdd5e2699/S4-up-350-rep1_S1_L001_R2_001.fastq.gz \
---metadata /data/CM_Custom_TB000175c_20230613_analysis/20230329-final_panel_up.csv \
---reference /data/references/hg38.fa \
---outdir /data/JM_Custom_TB000174c_20230613_analysis/ \
---sample_name S4-up-350-rep1
-```
+Right now, use relative paths when specifying inputs. I am currently working to add support for both absolute and relative paths. 
 
 ## Metadata file
 
-The metadata file should be in .csv format and looks like:
+One of the key files is the probe information sheet. This file should be in .csv format and looks like:
 
 | Chromosome | Start    | Stop     | Name     | Score | Strand | Code | Seq                                                           | len | GC   | mtDNA/rDNA hit | Target | Target chr | Target Start | Target Stop | Gap Size |
 |------------|----------|----------|----------|-------|--------|------|---------------------------------------------------------------|-----|------|----------------|--------|------------|--------------|-------------|----------|
@@ -106,43 +70,7 @@ Never publicly upload your API credentials!
 
 ## Output
 
-The pipeline creates symlinks to the work directory to the following files/directories:
-
-`alignments`
-SAM files containing each site-specific read alignments
-
-`amplicons`
-Sequences used for each site (attL, attR, cryptic B)
-
-`attL_extracted_reads`
-For sites where attL was detected, output a truncated version of the read to match attL. Used for input into CRISPResso2 
-
-`attR_extracted_reads` 
-For sites where attR was detected, output a truncated version of the read to match attL. Used for input into CRISPResso2 
-
-`cs2_output`
-CRISPResso2 output
-
-`extracted_reads`
-FASTQ files for every site. This is whats used to create the "alignments" directory
-
-`indel_info`
-Information on indels
-
-`initial_alignment` 
-Initial alignment of all reads to the reference genome
-
-`integration_and_indel_stats.csv`
-The most important output -- a csv file containing each site and a bunch of important information including integration percentage, indel percentage, risk category, gene, number of reads... etc
-
-`integration_stats.csv`
-A .csv file similar to above, except it just contains information on integration percentage. This will likely be removed in a future version. 
-
-`qc`
-Output from fastp containing QC info
-
-`target_info`
-A .csv containing information on each site including the cryptic sequences
+under construction
 
 
 
