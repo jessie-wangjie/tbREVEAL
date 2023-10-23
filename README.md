@@ -3,14 +3,6 @@ HCA (**H**ybrid **C**apture **A**nalysis) is a pipeline written in Nextflow that
 
 # Dependencies
 
-The following section lists the dependencies for this project.
-
-## System Requirements
-
-- Python 3.10
-
-## Packages
-
 The easiest way to get all dependencies needed is by using Docker. 
 
 First, clone the repo. 
