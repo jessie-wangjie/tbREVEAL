@@ -31,7 +31,7 @@ There are multiple ways to run the pipeline. The easiest way is to directly edit
 nextflow run pipeline.nf -with-docker hca
 ```
 
-Alternatively, you can give Nextflow the input files at runtime as such:
+Alternatively, you can give Nextflow the input files at runtime as such (this will overwrite any parameters given in the nextflow.config file):
 
 ```
 nextflow run pipeline.nf \
