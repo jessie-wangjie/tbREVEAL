@@ -19,6 +19,8 @@ Second, install Docker on your instance.
 
 Once docker is installed, you can build the Docker image by first navigating to the top of the code repository, then: 
 
+```docker build -t hca:latest .```
+
 If you wish to directly use a package manager like conda or mamba, there is an environment.yml file that you can utilize. 
 
 # Quick start
