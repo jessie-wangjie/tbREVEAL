@@ -18,12 +18,12 @@ process ADAPTER_AND_POLY_G_TRIM {
     publishDir "${params.outdir}/${sample_name}/probe_information_table/", pattern: '*.csv'
 
     input:
-        tuple val(sample_name), path(R1), path(R2), path(metadata)
+        tuple val(sample_name), path(R1), path(R2), path(metadata), val(group)
     output:
         path "${R1}"
         path "${R2}"
         path "${metadata}"
-        tuple val(sample_name), path("${sample_name}_trimmed.fastq.bgz"), emit: trimmed_fastq
+        tuple val(sample_name), val(group), path("${sample_name}_trimmed.fastq.bgz"), emit: trimmed_fastq
         tuple val(sample_name), path("${sample_name}_fastp.json"), emit: fastp_stats
 
     script:
@@ -54,15 +54,14 @@ process ALIGN_READS {
     publishDir "${params.outdir}/${sample_name}/"
 
     input:
-        //tuple val(sample_name), path(R1), path(R2), path(metadata)
         path reference
         path reference_index
-        tuple val(sample_name), path(fastq)
+        tuple val(sample_name), val(group), path(fastq)
         val dedup_method
 
     output:
         val(sample_name), emit: sample_name
-        tuple path("${sample_name}_initial_alignment.bam"), path("${sample_name}_initial_alignment.bam.bai"), emit: initial_alignment_bam
+        tuple val(group), path("${sample_name}_initial_alignment.bam"), path("${sample_name}_initial_alignment.bam.bai"), emit: initial_alignment_bam
         path "${reference}.fai"
 
     script:
@@ -108,7 +107,7 @@ process GET_TARGET_INFORMATION {
     cache 'lenient'
     publishDir "${params.outdir}/${sample_name}/"
     input:
-        tuple val(sample_name), path(R1), path(R2), path(metadata_fn)
+        tuple val(sample_name), path(R1), path(R2), path(metadata_fn), val(group)
         val attp_reg
         val attp_prime
     output:
@@ -125,10 +124,9 @@ process EXTRACT_TARGET_READS {
     maxForks 1
     publishDir "${params.outdir}/${sample_name}/"
     input:
-        //tuple val(sample_name), path(R1), path(R2), path(metadata_fn)
         path target_info
         val(sample_name)
-        tuple path(bam_file), path(bam_file_index)
+        tuple val(group), path(bam_file), path(bam_file_index)
     output:
         val sample_name, emit: sample_name
         path("${sample_name}_extracted_reads"), emit: extracted_reads_dir
@@ -142,9 +140,8 @@ process EXTRACT_TARGET_READS {
 
 process GENERATE_AMPLICONS {
     cache 'lenient'
-    publishDir "${params.outdir}/${sample_name}/"
+    publishDir "${params.outdir}"
     input: 
-        tuple val(sample_name), path(R1), path(R2), path(metadata)
         path target_info
     output:
         path "amplicons"
@@ -160,10 +157,9 @@ process ALIGN_TARGET_READS {
     maxForks 1
     publishDir "${params.outdir}/${sample_name}/"
     input:
-        // tuple val(sample_name), path(R1), path(R2), path(metadata)
         path target_info
-        val(sample_name)
-        path(fastq_dir)
+        val sample_name 
+        path fastq_dir 
         path amplicon_dir
     output:
         val(sample_name), emit: sample_name
@@ -178,10 +174,9 @@ process MEASURE_INTEGRATION {
     cache 'lenient'
     publishDir "${params.outdir}/${sample_name}", pattern: 'integration_stats.csv'
     input:
-        // tuple val(sample_name), path(R1), path(R2), path(metadata)
         path target_info
-        val(sample_name)
-        path(alignment_dir)
+        val sample_name 
+        path alignment_dir 
     output:
         val(sample_name), emit: sample_name
         path("${sample_name}_integration_stats.csv"), emit: integration_stats_file
@@ -199,9 +194,8 @@ process GATHER_QC_INFO {
     cache 'lenient'
     publishDir "${params.outdir}/${sample_name}/qc"
     input:
-        // tuple val(sample_name), path(R1), path(R2), path(metadata)
         tuple val(sample_name), path(json_file)
-        path(fastq_dir)
+        path fastq_dir 
     output:
         val(sample_name), emit: sample_name
         path "${sample_name}_qc_summary.csv", emit: qc_summary_file
@@ -216,11 +210,10 @@ process RUN_CS2_FOR_INDELS {
     maxForks 1
     publishDir "${params.outdir}/${sample_name}/cs2_output"
     input:
-        // tuple val(sample_name), path(R1), path(R2), path(metadata)
         val(sample_name)
-        path(attL_extracted_reads_dir)
-        path(attR_extracted_reads_dir)
-        path(beacon_extracted_reads_dir)
+        path attL_extracted_reads_dir 
+        path attR_extracted_reads_dir 
+        path beacon_extracted_reads_dir 
         path amplicon_dir
         path target_info
     output:
@@ -240,11 +233,10 @@ process GET_INDEL_INFO_FROM_CS2_OUTPUT {
     maxForks 1
     publishDir "${params.outdir}/${sample_name}/indel_info"
     input:
-        //tuple val(sample_name), path(R1), path(R2), path(metadata)
-        val(sample_name)
-        path(cs2_attL)
-        path(cs2_attR)
-        path(cs2_beacon)
+        val sample_name 
+        path cs2_attL 
+        path cs2_attR 
+        path cs2_beacon 
     output:
         val(sample_name), emit: sample_name
         path("${sample_name}_attL_indel_table.csv"), emit: attL_indel_table
@@ -261,8 +253,6 @@ process COMBINE_INTEGRATION_AND_INDEL_INFO {
     cache 'lenient'
     publishDir "${params.outdir}/${sample_name}"
     input:
-        // tuple val(sample_name), path(R1), path(R2), path(metadata)
-        // tuple val(sample_name), path(integration_table), path(indel_attR_table), path(indel_attL_table)
         val sample_name
         path integration_table
         path indel_attR_table
@@ -327,6 +317,22 @@ process MULTIQC {
     """
         multiqc .
     """
+}
+
+process MERGE_ALIGNMENTS {
+    cache 'lenient'
+    publishDir "${params.outdir}"
+    input:
+        tuple val(group), path(bam_files), path(bai_files)
+
+    output:
+        path("${group}_samples_alignment.bam*")
+
+    script:
+        """
+        samtools merge ${group}_samples_alignment.bam ${bam_files.join(' ')}
+        samtools index ${group}_samples_alignment.bam
+        """
 }
 
 // process RUN_MANTA {
@@ -397,7 +403,8 @@ workflow {
             row.sample_name, 
             file(r1), 
             file(r2), 
-            file(row.probe_list)
+            file(row.probe_list),
+            row.group
         )
     }
     .set { input_ch }
@@ -414,7 +421,7 @@ workflow {
 
     fastq_dir = EXTRACT_TARGET_READS(probe_information, initial_alignment.sample_name, initial_alignment.initial_alignment_bam)
 
-    amplicons_dir = GENERATE_AMPLICONS(input_ch,probe_information)
+    amplicons_dir = GENERATE_AMPLICONS(probe_information)
 
     alignment_dir = ALIGN_TARGET_READS(probe_information, fastq_dir.sample_name, fastq_dir.extracted_reads_dir, amplicons_dir)
 
@@ -439,6 +446,16 @@ workflow {
         .ifEmpty([]))
 
     CREATE_PLOTS(report_excel_file.excel_output)
+
+
+    initial_alignment.initial_alignment_bam
+        .groupTuple()
+        // .groupTuple(sample_name, group -> group)
+        // .map { group, bam_list -> [group, bam_list*.get(2)] } // get only the bam paths
+        .set { grouped_bam_files }
+    
+
+    MERGE_ALIGNMENTS(grouped_bam_files)
     
 }
 
