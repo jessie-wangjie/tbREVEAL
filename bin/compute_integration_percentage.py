@@ -116,8 +116,6 @@ def compute_integration_percentage(target_info, alignment_dir, sample_name):
                 for condition, cat_keys in rules:
                     if condition:
                         for key in cat_keys:
-                            # if read.query_name == 'M08748:37:000000000-L772W:1:1101:7707:8878:AGCCGATAT': 
-                            #     print(key)
                             categories[key].add(umi)
                             if 'attL' in key:
                                 attL_records[umi] = seq_record
@@ -129,7 +127,8 @@ def compute_integration_percentage(target_info, alignment_dir, sample_name):
                     
         for prefix, records in [(f'{sample_name}_attL', attL_records), (f'{sample_name}_attR', attR_records),(f'{sample_name}_beacon', beacon_records)]:
             if records:
-                path = f"{prefix}_extracted_reads/{row['id']}_{prefix}.fastq"
+                integration_side = prefix.split('_')[-1]
+                path = f"{prefix}_extracted_reads/{row['id']}_{integration_side}.fastq"
                 SeqIO.write(records.values(), path, "fastq")
 
         counts = {k: len(v) for k, v in categories.items()}

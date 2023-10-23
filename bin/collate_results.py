@@ -39,8 +39,6 @@ def collate_integration_files(project_info, integration_stats_filenames, project
         # file_path = os.path.join(base_dir, sample, 'integration_stats.csv')
 
         file_path = [i for i in integration_stats_filenames if sample_name in i][0]
-        print(sample_name)
-        print(file_path)
         
         # Check if the file exists
         if os.path.exists(file_path):
@@ -78,18 +76,13 @@ def collate_integration_files(project_info, integration_stats_filenames, project
             df_integration_short.columns = renamed_integration_short_cols
 
             if group == 'control':
-                print('control')
-                print(df_integration)
                 control_dfs_integration.append(df_integration)
                 control_dfs_reads.append(df_reads)
                 control_dfs_short_integration.append(df_integration_short)
             elif group == 'treated':
-                print('treated')
-                print(df_integration)
                 treated_dfs_integration.append(df_integration)
                 treated_dfs_reads.append(df_reads)
                 treated_dfs_short_integration.append(df_integration_short)
-    #print(treated_dfs_integration)
     # Merge dataframes horizontally
     control_dfs_integration = pd.concat(control_dfs_integration,axis=1)
     control_dfs_reads = pd.concat(control_dfs_reads,axis=1)
@@ -97,6 +90,7 @@ def collate_integration_files(project_info, integration_stats_filenames, project
     control_merged_integration_df = pd.concat([control_dfs_integration], axis=1)
     control_merged_reads_df = pd.concat([control_dfs_reads], axis=1)
     control_merged_short_integration_df = pd.concat([control_dfs_short_integration], axis=1)
+
 
     treated_dfs_integration = pd.concat(treated_dfs_integration,axis=1)
     treated_dfs_reads = pd.concat(treated_dfs_reads,axis=1)
@@ -117,13 +111,12 @@ def collate_integration_files(project_info, integration_stats_filenames, project
     merged_integration_df = pd.concat([base_columns_df,control_merged_integration_df,treated_merged_integration_df], axis=1)
     merged_reads_df = pd.concat([base_columns_df,control_merged_reads_df,treated_merged_reads_df], axis=1)
     merged_short_integration_df = pd.concat([base_columns_df,control_merged_short_integration_df,treated_merged_short_integration_df], axis=1)
-    #print(merged_integration_df)
+
     control_samples_short_cols = [col for col in control_merged_short_integration_df]
     treated_samples_short_cols = [col for col in treated_merged_short_integration_df]
 
-    control_samples_short_df = pd.concat([base_columns_df,control_merged_short_integration_df[control_samples_short_cols]])
-    treated_samples_short_df = pd.concat([base_columns_df,treated_merged_short_integration_df[treated_samples_short_cols]])
-
+    control_samples_short_df = pd.concat([base_columns_df,control_merged_short_integration_df[control_samples_short_cols]],axis=1)
+    treated_samples_short_df = pd.concat([base_columns_df,treated_merged_short_integration_df[treated_samples_short_cols]],axis=1)
     attL_treated_total = treated_samples_short_df.filter(like='AttL').sum(axis=1)
     attR_treated_total = treated_samples_short_df.filter(like='AttR').sum(axis=1)
     beacon_treated_total = treated_samples_short_df.filter(like='Beacon').sum(axis=1)
@@ -160,6 +153,7 @@ def collate_integration_files(project_info, integration_stats_filenames, project
                                     'Treated Conversion %':total_treated_conversion_percentage,})
     
     df_by_condition.reset_index(drop=True,inplace=True)
+    #print(df_by_condition)
 
     df_by_condition = pd.concat([base_columns_df, df_by_condition], axis=1)
     df_by_condition = df_by_condition.fillna(0)

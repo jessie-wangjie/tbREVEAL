@@ -56,6 +56,7 @@ if __name__ == '__main__':
     parser.add_argument('--attR_indel_table', help='The name of the attR indel table CSV file')
     parser.add_argument('--integration_table', help='The name of the integration stats CSV file')
     parser.add_argument('--output_fn', help='The name of the integration stats CSV file')
+    
 
     # parse arguments
     args = parser.parse_args()
