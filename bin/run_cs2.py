@@ -59,8 +59,17 @@ def run_cs2_for_type(amplicon_dir, target_info_df, junction_type, sample_name):
                 allele2html_command += f" -b {quant_window}"
             subprocess.call(allele2html_command, shell=True)
 
-    pattern = f"CRISPResso_on_*_{junction_type}"
+    pattern = f"CRISPResso_on_*_{junction_type}/CRISPResso_quantification_of_editing_frequency.txt"
     destination_folder = f"{sample_name}_cs2_{junction_type}"
+
+    matching_files = glob.glob(pattern)
+    for file_path in matching_files:
+        file_name = os.path.basename(file_path)
+        destination_path = os.path.join(destination_folder, file_name)
+        shutil.move(file_path, destination_path)
+    
+    pattern = f"CRISPResso_on_*_{junction_type}/cs2_alignment_html/*.html"
+    destination_folder = f"{sample_name}_{junction_type}_alignments"
 
     matching_files = glob.glob(pattern)
     for file_path in matching_files:
@@ -79,6 +88,10 @@ if __name__ == "__main__":
     os.makedirs(f'{args.sample_name}_cs2_attL', exist_ok=True)
     os.makedirs(f'{args.sample_name}_cs2_attR', exist_ok=True)
     os.makedirs(f'{args.sample_name}_cs2_beacon', exist_ok=True)
+
+    os.makedirs(f'{args.sample_name}_attL_alignments', exist_ok=True)
+    os.makedirs(f'{args.sample_name}_attR_alignments', exist_ok=True)
+    os.makedirs(f'{args.sample_name}_beacon_alignments', exist_ok=True)
 
     target_info_df = read_target_info(args.target_info)
     for junction_type in ['attL', 'attR', 'beacon']:

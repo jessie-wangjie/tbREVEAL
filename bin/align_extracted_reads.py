@@ -17,7 +17,7 @@ def align(target_info,fastq_dir,amplicon_dir, sample_name):
         #subprocess.run(["minimap2", "-ax", "sr", fasta_file, fastq1_file, fastq2_file, "-o", output_file],stdout=subprocess.DEVNULL,stderr=subprocess.STDOUT)
 
         subprocess.run(["bwa", "index", fasta_file])
-        subprocess.run(["bwa", "mem", "-t", "28", "-r", "1", "-k","11",fasta_file, fastq_file, "-o", output_file])
+        subprocess.run(["bwa", "mem", "-t", "28", "-r", "1", "-k","11","-A", "2", "-E", "1",fasta_file, fastq_file, "-o", output_file])
 
 if __name__ == "__main__":
     # Create the parser

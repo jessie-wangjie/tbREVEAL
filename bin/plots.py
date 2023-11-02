@@ -16,10 +16,15 @@ def create_plot(excel_fn):
     recombination_data = {}
 
     for sample in samples:
-        attL_col = f'{sample}_Number of AttL Cargo Reads'
-        attR_col = f'{sample}_Number of AttR Cargo Reads'
+        print(sample)
+        attL_col = [i for i in read_counts_df.columns if f"{sample}_Number of AttL" in i][0]
+        print(attL_col)
+        attR_col = [i for i in read_counts_df.columns if f"{sample}_Number of AttR" in i][0]
+        beacon_col = [i for i in read_counts_df.columns if sample in i and 'Beacon Reads' in i][0]
+        # attL_col = f'{sample}_Number of AttL Cargo Reads'
+        # attR_col = f'{sample}_Number of AttR Cargo Reads'
         WT_col = f'{sample}_Number of WT Reads'
-        beacon_col = f'{sample}_Number of Complete Beacon Reads'
+        # beacon_col = f'{sample}_Number of Complete Beacon Reads'
         
         if attL_col in read_counts_df and attR_col in read_counts_df:
             # Get the max of attL and attR
@@ -30,9 +35,10 @@ def create_plot(excel_fn):
             
             # Store in the dictionary
             recombination_data[sample] = recombination
-
+    print(recombination_data)
     # Convert the recombination data to a new dataframe
     recombination_df = pd.DataFrame(recombination_data)
+    print(recombination_df)
 
     recombination_df = recombination_df.sort_index(axis=1)
 
@@ -62,7 +68,7 @@ def create_plot(excel_fn):
                 cbar_kws={"shrink": 0.5,'location':'top','label':'Recombination %'}
                 )
 
-    ax.hlines([len(recombination_df_nonzero.columns)], *ax.get_xlim(), colors=['white'],linewidth=3)
+    ax.hlines([(len(recombination_df_nonzero.columns)/2)-0.5], *ax.get_xlim(), colors=['white'],linewidth=3)
     plt.savefig('recombination_heatmap.png')
 
 if __name__ == "__main__":

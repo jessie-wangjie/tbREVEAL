@@ -17,7 +17,7 @@ def reverse_complement(seq):
     complement = {'A': 'T', 'C': 'G', 'G': 'C', 'T': 'A'}
     return "".join(complement[base] for base in reversed(seq))
 
-def get_target_info(metadata_fn, attp_reg_seq, attp_prime_seq):
+def get_target_info(metadata_fn, attp_reg_seq, attp_prime_seq,reference_path,cargo_reference_path):
 
     ids = []
     chrs = []
@@ -49,7 +49,7 @@ def get_target_info(metadata_fn, attp_reg_seq, attp_prime_seq):
 
             query = '''
             SELECT
-                bases, left_half, right_half, spacer_table.jmin, target_gene_name, direction_of_transcription
+                bases, left_half, right_half, spacer_table.jmin, spacer_table.jmax, target_gene_name, direction_of_transcription
             FROM
                 atg_atg AS atg_table
             JOIN 
@@ -70,9 +70,7 @@ def get_target_info(metadata_fn, attp_reg_seq, attp_prime_seq):
             len_genomic_seq_to_include = 20
 
             if result:
-                bases, left_half, right_half, spacer_jmin_cutsite, closest_gene, direction_of_transcription = result
-                cargo_reference_path = f'/data/references/AAVG097.fa'
-                reference_path = f'/data/references/hg38.fa'
+                bases, left_half, right_half, spacer_jmin_cutsite, spacer_jmax_cutsite, closest_gene, direction_of_transcription = result
 
             chr = 'chr' + str(chr)
             
@@ -82,7 +80,15 @@ def get_target_info(metadata_fn, attp_reg_seq, attp_prime_seq):
             b_reg_sequence = bases[left_half_list[0]-1:left_half_list[1]+2]
             b_prime_sequence = bases[right_half_list[0]-1:right_half_list[1]]
 
-            wt_command = f'samtools faidx {reference_path} {chr}:{int(spacer_jmin_cutsite)}-{int(spacer_jmin_cutsite)+len(bases)}'
+            beacon_beginning_sequence_command = f'samtools faidx {reference_path} {chr}:{int(spacer_jmin_cutsite)-len_genomic_seq_to_include}-{int(spacer_jmin_cutsite)-1}'
+            beacon_end_sequence_command = f'samtools faidx {reference_path} {chr}:{int(spacer_jmax_cutsite)}-{int(spacer_jmax_cutsite)+len_genomic_seq_to_include}'
+
+            beacon_beginning_sequence = ''.join(subprocess.check_output(beacon_beginning_sequence_command, shell=True).decode(sys.stdout.encoding).split('\n')[1:]).upper()
+            beacon_end_sequence = ''.join(subprocess.check_output(beacon_end_sequence_command, shell=True).decode(sys.stdout.encoding).split('\n')[1:]).upper()
+
+            beacon_sequence = beacon_beginning_sequence + bases + beacon_end_sequence
+
+            wt_command = f'samtools faidx {reference_path} {chr}:{int(spacer_jmin_cutsite)}-{int(spacer_jmin_cutsite)+len(beacon_sequence)}'
 
             wt_sequence = ''.join(subprocess.check_output(wt_command, shell=True).decode(sys.stdout.encoding).split('\n')[1:]).upper()
             attL = (b_reg_sequence + attp_prime_seq).upper()
@@ -126,7 +132,7 @@ def get_target_info(metadata_fn, attp_reg_seq, attp_prime_seq):
             starts.append(start)
             ends.append(end)
             wts.append(wt_sequence)
-            beacons.append(bases)
+            beacons.append(beacon_sequence)
             attLs.append(attL)
             attRs.append(attR)
             attL_quant_windows.append(attL_quant_window_string)
@@ -171,8 +177,6 @@ def get_target_info(metadata_fn, attp_reg_seq, attp_prime_seq):
 
             if result:
                 genome_build, chr, start, end, central_dinucleotide_start, central_nucleotides_seq, strand,closest_gene,threat_tier,overlapping_feature = result
-                reference_path = f'/data/references/hg38.fa'
-                cargo_reference_path = f'/data/references/AAVG097.fa'
                 if strand == '+':
                     cryptic_b_reg_command = f'samtools faidx {reference_path} {chr}:{start-len_genomic_seq_to_include}-{central_dinucleotide_start + len(central_nucleotides_seq) - 1}'
                     cryptic_b_prime_command = f'samtools faidx {reference_path} {chr}:{central_dinucleotide_start + len(central_nucleotides_seq)}-{end+len_genomic_seq_to_include}'
@@ -292,7 +296,9 @@ if __name__ == "__main__":
     parser.add_argument("--metadata", required=True, type=str, help="Metadata file")
     parser.add_argument("--attp_reg", required=True, type=str, help="P sequence")
     parser.add_argument("--attp_prime", required=True, type=str, help="P prime sequence")
+    parser.add_argument("--reference", required=True, type=str, help="P prime sequence")
+    parser.add_argument("--cargo", required=True, type=str, help="P prime sequence")
     # Parse the arguments
     args = parser.parse_args()
 
-    get_target_info(args.metadata, args.attp_reg, args.attp_prime)
+    get_target_info(args.metadata, args.attp_reg, args.attp_prime, args.reference, args.cargo)

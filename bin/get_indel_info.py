@@ -7,11 +7,12 @@ import argparse
 
 def generate_indel_table(directory, output_fn):
     # Define the wildcard pattern
-    file_pattern = "*/CRISPResso_quantification_of_editing_frequency.txt"
+    file_pattern = "CRISPResso_quantification_of_editing_frequency.txt"
 
     # Initialize the final table as an empty DataFrame
     final_table = pd.DataFrame(columns=["Amplicon","Input Reads","Unmodified Reads", "Modified Reads","Unmodified%", "Modified%", "Insertions", "Deletions",
                                         "Substitutions", "Insertion%", "Deletion%", "Substitution%"])
+
 
     # Find all matching files in the directory
     file_paths = glob.glob(os.path.join(directory, file_pattern))

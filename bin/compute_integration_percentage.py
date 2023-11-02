@@ -29,6 +29,8 @@ def compute_integration_percentage(target_info, alignment_dir, sample_name):
     target_info_df = pd.read_csv(target_info)
     integration_dict = {}
 
+    full_attb_sequence = 'GGCTTGTCGACGACGGCGGTCTCCGTCGTCAGGATCAT'
+
     def get_umi(read):
         return read.query_name
     
@@ -104,9 +106,9 @@ def compute_integration_percentage(target_info, alignment_dir, sample_name):
                     (read.reference_name == 'attR_amplicon' and 'AA' in row['id'] and alignment_start < 10 and alignment_end > 57, 
                      ['partial_attR', 'complete_attR', 'cargo_attR']),
 
-                    (read.reference_name == 'beacon_amplicon' and 'AA' in row['id'] and ((alignment_start <= 1 and alignment_end < 39) or (alignment_start > 1 and alignment_end >= 39)), 
+                    (read.reference_name == 'beacon_amplicon' and 'AA' in row['id'] and full_attb_sequence not in seq, 
                      ['partial_beacon']),
-                    (read.reference_name == 'beacon_amplicon' and 'AA' in row['id'] and alignment_start <= 1 and alignment_end >= 39, 
+                    (read.reference_name == 'beacon_amplicon' and 'AA' in row['id'] and full_attb_sequence in seq, 
                      ['partial_beacon', 'complete_beacon']),
 
                     (read.reference_name == 'wt_amplicon', ['wt'])

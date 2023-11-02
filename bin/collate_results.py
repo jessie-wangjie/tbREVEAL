@@ -23,21 +23,21 @@ def collate_integration_files(project_info, integration_stats_filenames, project
 
     project_info_df  = pd.read_csv(project_info)
 
-    control_dfs_integration = []
-    control_dfs_reads = []
-    control_dfs_short_integration = []
+    # Dictionary initialization
+    dfs_integration = {}
+    dfs_reads = {}
+    dfs_short_integration = {}
 
-    treated_dfs_integration = []
-    treated_dfs_reads = []
-    treated_dfs_short_integration = []
+    # Merge dataframes for each group
+    merged_integration_dfs = []
+    merged_reads_dfs = []
+    merged_short_integration_dfs = {}
 
     # Iterate through each sample directory and read the CSV file
     for index,row in project_info_df.iterrows():
         sample_name = row['sample_name']
         group = row['group']
         
-        # file_path = os.path.join(base_dir, sample, 'integration_stats.csv')
-
         file_path = [i for i in integration_stats_filenames if sample_name in i][0]
         
         # Check if the file exists
@@ -75,99 +75,90 @@ def collate_integration_files(project_info, integration_stats_filenames, project
             df_reads.columns = renamed_reads_cols
             df_integration_short.columns = renamed_integration_short_cols
 
-            if group == 'control':
-                control_dfs_integration.append(df_integration)
-                control_dfs_reads.append(df_reads)
-                control_dfs_short_integration.append(df_integration_short)
-            elif group == 'treated':
-                treated_dfs_integration.append(df_integration)
-                treated_dfs_reads.append(df_reads)
-                treated_dfs_short_integration.append(df_integration_short)
+            # Update dictionary with group as key
+            if group not in dfs_integration:
+                dfs_integration[group] = [df_integration]
+                dfs_reads[group] = [df_reads]
+                dfs_short_integration[group] = [df_integration_short]
+            else:
+                dfs_integration[group].append(df_integration)
+                dfs_reads[group].append(df_reads)
+                dfs_short_integration[group].append(df_integration_short)
+
+    
+
     # Merge dataframes horizontally
-    control_dfs_integration = pd.concat(control_dfs_integration,axis=1)
-    control_dfs_reads = pd.concat(control_dfs_reads,axis=1)
-    control_dfs_short_integration = pd.concat(control_dfs_short_integration,axis=1)
-    control_merged_integration_df = pd.concat([control_dfs_integration], axis=1)
-    control_merged_reads_df = pd.concat([control_dfs_reads], axis=1)
-    control_merged_short_integration_df = pd.concat([control_dfs_short_integration], axis=1)
 
 
-    treated_dfs_integration = pd.concat(treated_dfs_integration,axis=1)
-    treated_dfs_reads = pd.concat(treated_dfs_reads,axis=1)
-    treated_dfs_short_integration = pd.concat(treated_dfs_short_integration,axis=1)
-    treated_merged_integration_df = pd.concat([treated_dfs_integration], axis=1)
-    treated_merged_reads_df = pd.concat([treated_dfs_reads], axis=1)
-    treated_merged_short_integration_df = pd.concat([treated_dfs_short_integration], axis=1)
+    for key in dfs_integration:
+        temp_df = pd.concat(dfs_integration[key],axis=1)
+        temp_df = temp_df.loc[:, ~temp_df.columns.duplicated()]
+        merged_integration_dfs.append(temp_df)
 
-    # Remove duplicated 'Target' columns
-    treated_merged_integration_df = treated_merged_integration_df.loc[:, ~treated_merged_integration_df.columns.duplicated()]
-    treated_merged_reads_df = treated_merged_reads_df.loc[:, ~treated_merged_reads_df.columns.duplicated()]
-    treated_merged_short_integration_df = treated_merged_short_integration_df.loc[:, ~treated_merged_short_integration_df.columns.duplicated()]
+    merged_integrations_dfs_combined = pd.concat(merged_integration_dfs,axis=1)
+    merged_integrations_dfs_combined = pd.concat([base_columns_df,merged_integrations_dfs_combined],axis=1)
 
-    control_merged_integration_df = control_merged_integration_df.loc[:, ~control_merged_integration_df.columns.duplicated()]
-    control_merged_reads_df = control_merged_reads_df.loc[:, ~control_merged_reads_df.columns.duplicated()]
-    control_merged_short_integration_df = control_merged_short_integration_df.loc[:, ~control_merged_short_integration_df.columns.duplicated()]
-
-    merged_integration_df = pd.concat([base_columns_df,control_merged_integration_df,treated_merged_integration_df], axis=1)
-    merged_reads_df = pd.concat([base_columns_df,control_merged_reads_df,treated_merged_reads_df], axis=1)
-    merged_short_integration_df = pd.concat([base_columns_df,control_merged_short_integration_df,treated_merged_short_integration_df], axis=1)
-
-    control_samples_short_cols = [col for col in control_merged_short_integration_df]
-    treated_samples_short_cols = [col for col in treated_merged_short_integration_df]
-
-    control_samples_short_df = pd.concat([base_columns_df,control_merged_short_integration_df[control_samples_short_cols]],axis=1)
-    treated_samples_short_df = pd.concat([base_columns_df,treated_merged_short_integration_df[treated_samples_short_cols]],axis=1)
-    attL_treated_total = treated_samples_short_df.filter(like='AttL').sum(axis=1)
-    attR_treated_total = treated_samples_short_df.filter(like='AttR').sum(axis=1)
-    beacon_treated_total = treated_samples_short_df.filter(like='Beacon').sum(axis=1)
-    wt_treated_total = treated_samples_short_df.filter(like='WT').sum(axis=1)
-    max_treated_attL_attR = np.max(pd.DataFrame({"attL": attL_treated_total, "attR": attR_treated_total}),axis=1)
-
-    total_treated_conversion_percentage = 100*(max_treated_attL_attR) / (max_treated_attL_attR + beacon_treated_total)
-    total_treated_PGI_percentage = 100*(max_treated_attL_attR) / (max_treated_attL_attR + beacon_treated_total + wt_treated_total)
-    total_treated_beacon_percentage = 100*(beacon_treated_total + max_treated_attL_attR) / (max_treated_attL_attR + beacon_treated_total + wt_treated_total)
-
-    attL_control_total = control_samples_short_df.filter(like='AttL').sum(axis=1)
-    attR_control_total = control_samples_short_df.filter(like='AttR').sum(axis=1)
-    beacon_control_total = control_samples_short_df.filter(like='Beacon').sum(axis=1)
-    wt_control_total = control_samples_short_df.filter(like='WT').sum(axis=1)
-    max_control_attL_attR = np.max(pd.DataFrame({"attL": attL_control_total, "attR": attR_control_total}),axis=1)
+    for key in dfs_reads:
+        temp_df = pd.concat(dfs_reads[key],axis=1)
+        temp_df = temp_df.loc[:, ~temp_df.columns.duplicated()]
+        merged_reads_dfs.append(temp_df)
     
-    total_control_conversion_percentage = 100*(max_control_attL_attR) / (max_control_attL_attR + beacon_control_total)
-    total_control_PGI_percentage = 100*(max_control_attL_attR) / (max_control_attL_attR + beacon_control_total + wt_control_total)
-    total_control_beacon_percentage = 100*(beacon_control_total + max_control_attL_attR) / (max_control_attL_attR + beacon_control_total + wt_control_total)
+    merged_reads_dfs_combined = pd.concat(merged_reads_dfs,axis=1)
+    merged_reads_dfs_combined = pd.concat([base_columns_df,merged_reads_dfs_combined],axis=1)
 
-    df_by_condition = pd.DataFrame({'AttL Control Total': attL_control_total, 
-                                    'AttR Control Total': attR_control_total, 
-                                    'Beacon Control Total': beacon_control_total, 
-                                    'WT Control Total': wt_control_total,
-                                    'AttL Treated Total': attL_treated_total, 
-                                    'AttR Treated Total': attR_treated_total, 
-                                    'Beacon Treated Total': beacon_treated_total,
-                                    'WT Treated Total': wt_treated_total, 
-                                    'Control Beacon %': total_control_beacon_percentage,
-                                    'Treated Beacon %': total_treated_beacon_percentage,
-                                    'Control PGI %': total_control_PGI_percentage,
-                                    'Treated PGI %': total_treated_PGI_percentage,
-                                    'Control Conversion %':total_control_conversion_percentage, 
-                                    'Treated Conversion %':total_treated_conversion_percentage,})
+    tmp_lst = []
+    for key in dfs_short_integration:
+        temp_df = pd.concat(dfs_short_integration[key],axis=1)
+        temp_df = temp_df.loc[:, ~temp_df.columns.duplicated()]
+        if key not in merged_short_integration_dfs:
+            merged_short_integration_dfs[key] = [temp_df]
+        else:
+            merged_short_integration_dfs[key].append(temp_df)
+        tmp_lst.append(temp_df)
     
-    df_by_condition.reset_index(drop=True,inplace=True)
-    #print(df_by_condition)
+    merged_short_integration_dfs_combined = pd.concat(tmp_lst,axis=1)
+    merged_short_integration_dfs_combined = pd.concat([base_columns_df,merged_short_integration_dfs_combined],axis=1)
 
-    df_by_condition = pd.concat([base_columns_df, df_by_condition], axis=1)
-    df_by_condition = df_by_condition.fillna(0)
+    dfs_by_condition = []
+
+    for key in merged_short_integration_dfs:
+        temp_df = pd.concat(merged_short_integration_dfs[key],axis=1)
+        temp_df = pd.concat([base_columns_df,temp_df],axis=1)
+        attL_total = temp_df.filter(like='AttL').sum(axis=1)
+        attR_total = temp_df.filter(like='AttR').sum(axis=1)
+        beacon_total = temp_df.filter(like='Beacon').sum(axis=1)
+        wt_total = temp_df.filter(like='WT').sum(axis=1)
+        max_attL_attR = np.max(pd.DataFrame({"attL": attL_total, "attR": attR_total}),axis=1)
+        total_conversion_percentage = 100*(max_attL_attR) / (max_attL_attR + beacon_total)
+        total_PGI_percentage = 100*(max_attL_attR) / (max_attL_attR + beacon_total + wt_total)
+        total_beacon_percentage = 100*(beacon_total + max_attL_attR) / (max_attL_attR + beacon_total + wt_total)
+        df_by_condition = pd.DataFrame({f'AttL {key} Total': attL_total, 
+                                    f'AttR {key} Total': attR_total, 
+                                    f'Beacon {key} Total': beacon_total, 
+                                    f'WT {key} Total': wt_total,
+                                    f'{key} Beacon %': total_beacon_percentage,
+                                    f'{key} PGI %': total_PGI_percentage,
+                                    f'{key} Conversion %':total_conversion_percentage})
+        df_by_condition.reset_index(drop=True,inplace=True)
+        dfs_by_condition.append(df_by_condition)
+
+    dfs_by_condition_concat = pd.concat(dfs_by_condition,axis=1)
+    dfs_by_condition_concat = pd.concat([base_columns_df,dfs_by_condition_concat],axis=1)
+    dfs_by_condition_concat = dfs_by_condition_concat.fillna(0)
+
+    
+    
     
     output_fn = f'{project_name}_results.xlsx'
     # Save the two sheets into an Excel file
     with pd.ExcelWriter(output_fn, engine='openpyxl') as writer:
-        merged_integration_df.to_excel(writer, sheet_name='Integration Percent', index=False)
-        merged_reads_df.to_excel(writer, sheet_name='Integration Reads', index=False)
-        merged_short_integration_df.to_excel(writer, sheet_name='Condensed Results', index=False)
-        df_by_condition.to_excel(writer, sheet_name='Results by Condition', index=False)
+        merged_integrations_dfs_combined.to_excel(writer, sheet_name='Integration Percent', index=False)
+        merged_reads_dfs_combined.to_excel(writer, sheet_name='Integration Reads', index=False)
+        merged_short_integration_dfs_combined.to_excel(writer, sheet_name='Condensed Results', index=False)
+        dfs_by_condition_concat.to_excel(writer, sheet_name='Results by Condition', index=False)
         
         # Now, add a thick border using openpyxl
-        for sheet_name, df, interval in zip(["Integration Percent", "Integration Reads", "Condensed Results","Results by Condition"], [merged_integration_df, merged_reads_df,merged_short_integration_df], [6, 9, 4]):
+        for sheet_name, df, interval in zip(["Integration Percent", "Integration Reads", "Condensed Results","Results by Condition"], [merged_integrations_dfs_combined, merged_reads_dfs_combined,merged_short_integration_dfs_combined], [6, 9, 5]):
             ws = writer.sheets[sheet_name]
             
             # Define thick border

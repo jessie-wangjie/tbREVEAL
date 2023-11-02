@@ -23,6 +23,8 @@ RUN micromamba shell init -s bash -p /usr/local
 # Use micromamba to create an environment from the environment.yml file
 RUN micromamba install -y -n base -f environment.yml && micromamba clean --all --yes
 
+RUN micromamba run -n base pip install git+https://github.com/pinellolab/AmpUMI.git
+
 COPY bin/ ./bin/
 RUN chmod 755 ./bin/*
 COPY root.crt  /root/.postgresql/root.crt
