@@ -4,20 +4,39 @@ import pandas as pd
 import subprocess
 import argparse
 import os
+import multiprocessing
 
-def align(target_info,fastq_dir,amplicon_dir, sample_name):
+def align_row(args):
+    """
+    Worker function to align each row.
+    """
+    fastq_dir, amplicon_dir, alignments_dir, row = args
+    fastq_file = os.path.join(fastq_dir, row['id'] + '.fastq')
+    fasta_file = os.path.join(amplicon_dir, row['id'] + '_amplicon.fasta')
+    output_file = os.path.join(alignments_dir, row['id'] + '_alignment.sam')
+
+    subprocess.run(["bwa", "index", fasta_file])
+    subprocess.run(["bwa", "mem", "-t", "28", "-r", "1", "-k", "11", "-A", "8", "-E", "1", fasta_file, fastq_file, "-o", output_file])
+
+def align(target_info, fastq_dir, amplicon_dir, sample_name):
     target_info_df = pd.read_csv(target_info)
+
     # Specify the directory path
     alignments_dir = f'{sample_name}_alignments'
-    os.makedirs(alignments_dir)
-    for index, row in target_info_df.iterrows():
-        fastq_file = fastq_dir + '/' + row['id'] + '.fastq'
-        fasta_file = amplicon_dir + '/' + row['id'] + '_amplicon.fasta'
-        output_file = alignments_dir + '/' + row['id'] + '_alignment.sam'
-        #subprocess.run(["minimap2", "-ax", "sr", fasta_file, fastq1_file, fastq2_file, "-o", output_file],stdout=subprocess.DEVNULL,stderr=subprocess.STDOUT)
+    os.makedirs(alignments_dir, exist_ok=True)
 
-        subprocess.run(["bwa", "index", fasta_file])
-        subprocess.run(["bwa", "mem", "-t", "28", "-r", "1", "-k","11","-A", "2", "-E", "1",fasta_file, fastq_file, "-o", output_file])
+    # Prepare jobs for multiprocessing
+    jobs = [(fastq_dir, amplicon_dir, alignments_dir, row) for index, row in target_info_df.iterrows()]
+
+    # Create a multiprocessing pool
+    pool = multiprocessing.Pool(processes=multiprocessing.cpu_count())
+
+    # Process each row in parallel
+    pool.map(align_row, jobs)
+
+    # Close the pool and wait for the work to finish
+    pool.close()
+    pool.join()
 
 if __name__ == "__main__":
     # Create the parser

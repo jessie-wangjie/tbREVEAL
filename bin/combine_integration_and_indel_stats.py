@@ -23,9 +23,6 @@ def merge_tables(attL_indel_table, attR_indel_table, integration_stats, output_f
 
     df = df.reset_index(drop=True)
 
-    print(df)
-    print(df3)
-
     # merge the new dataframe with df3
     merged_df = pd.merge(df, df3, how='right', left_on='Amplicon', right_on='Target')
 

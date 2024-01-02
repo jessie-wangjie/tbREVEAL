@@ -5,13 +5,18 @@ params.cargo = '/data/references/AAVG107.fa'
 params.outdir = ""
 params.ATTP_REG = 'GTGGTTTGTCTGGTCAACCACCGCGGT'
 params.ATTP_PRIME = 'CTCAGTGGTGTACGGTACAAACCCA'
-params.deduplication_method = 'STRICT'
 params.collapse_condition = 'Complete'
 params.initial_mapper = 'minimap2'
 params.project_name = ''
 params.samplesheet = ''
 params.reference_index_location = ''
 params.lmpcr_mode = false
+params.useBam = false
+params.umi_in_header = false
+params.umi_loc = 'per_read'
+params.umi_length = 5
+params.other_fastp_params = ''
+params.notebook_template = '/data/tbHCA/bin/report_generation.ipynb'
 
 process ADAPTER_AND_POLY_G_TRIM {
     cache 'lenient'
@@ -23,7 +28,10 @@ process ADAPTER_AND_POLY_G_TRIM {
 
     input:
         tuple val(sample_name), path(R1), path(R2), path(metadata), val(group)
-        val lmpcr_mode
+        val umi_in_header
+        val umi_loc
+        val umi_length
+        val other_fastp_params
     output:
         path "${R1}"
         path "${R2}"
@@ -33,32 +41,24 @@ process ADAPTER_AND_POLY_G_TRIM {
         tuple val(sample_name), path("${sample_name}_fastp.json"), emit: fastp_stats
 
     script:
-        if (lmpcr_mode == false) {
-        """
-        fastp -m -c --include_unmerged --low_complexity_filter --cut_right --overlap_len_require 10 -i ${R1} -I ${R2} --merged_out ${sample_name}_trimmed.fastq.gz -w 16 -g -j ${sample_name}_fastp.json
-        gunzip -c ${sample_name}_trimmed.fastq.gz | bgzip -@ 8 > ${sample_name}_trimmed.fastq.bgz
+        if (umi_in_header == false) {
+            """
+            fastp -m -c --include_unmerged --low_complexity_filter ${other_fastp_params} --overlap_len_require 10 -i ${R1} -I ${R2} --merged_out ${sample_name}_trimmed.fastq.gz -w 16 -g -j ${sample_name}_fastp.json -U --umi_loc=${umi_loc} --umi_len=${umi_length}
 
-        fastp --low_complexity_filter --cut_right -i ${R1} -I ${R2} -o ${sample_name}_trimmed_R1.fastq.gz -O ${sample_name}_trimmed_R2.fastq.gz -w 16 -g
-        """
+            gunzip -c ${sample_name}_trimmed.fastq.gz | bgzip -@ 8 > ${sample_name}_trimmed.fastq.bgz
+
+            fastp --low_complexity_filter ${other_fastp_params} -i ${R1} -I ${R2} -o ${sample_name}_trimmed_R1.fastq.gz -O ${sample_name}_trimmed_R2.fastq.gz -w 16 -U --umi_loc=${umi_loc} --umi_len=${umi_length}
+            """ 
         } else {
-        """
-        fastp -m -c --include_unmerged --low_complexity_filter --cut_right --overlap_len_require 10 -i ${R1} -I ${R2} --merged_out ${sample_name}_trimmed.fastq.gz -w 16 -g -j ${sample_name}_fastp.json 
+            """
+            fastp -m -c --include_unmerged --low_complexity_filter ${other_fastp_params} --overlap_len_require 10 -i ${R1} -I ${R2} --merged_out ${sample_name}_trimmed.fastq.gz -w 16 -g -j ${sample_name}_fastp.json
 
-        fastp --low_complexity_filter --cut_right -i ${R1} -I ${R2} -o ${sample_name}_trimmed_R1.fastq.gz -O ${sample_name}_trimmed_R2.fastq.gz -w 16 -g
+            gunzip -c ${sample_name}_trimmed.fastq.gz | bgzip -@ 8 > ${sample_name}_trimmed.fastq.bgz
 
-        gunzip ${sample_name}_trimmed.fastq.gz
-
-        AmpUMI Process --fastq ${sample_name}_trimmed.fastq --fastq_out ${sample_name}_trimmed2.fastq --umi_regex "^IIIIIIIIIII"
-
-        mv ${sample_name}_trimmed2.fastq ${sample_name}_trimmed.fastq
-
-        gzip ${sample_name}_trimmed.fastq
-
-        gunzip -c ${sample_name}_trimmed.fastq.gz | bgzip -@ 8 > ${sample_name}_trimmed.fastq.bgz
-        """
+            fastp --low_complexity_filter ${other_fastp_params} -i ${R1} -I ${R2} -o ${sample_name}_trimmed_R1.fastq.gz -O ${sample_name}_trimmed_R2.fastq.gz -w 16
+            """ 
         }
-        
-}
+    }
 
 process CREATE_REFERENCE_INDEX {
     cache 'lenient'
@@ -94,7 +94,6 @@ process ALIGN_READS {
         path reference
         path reference_index
         tuple val(sample_name), val(group), path(fastq)
-        val dedup_method
         val initial_mapper
 
     output:
@@ -113,57 +112,17 @@ process ALIGN_READS {
         error "Unsupported initial_mapper: $initial_mapper"
     }
 
-    if (dedup_method == "STRICT") {
-        """
-        $alignment_command
-        samtools view -@ 16 -b ${sample_name}_initial_alignment.sam > ${sample_name}_initial_alignment.bam
-        samtools sort -@ 16 ${sample_name}_initial_alignment.bam > ${sample_name}_initial_alignment_sorted.bam
-        mv ${sample_name}_initial_alignment_sorted.bam ${sample_name}_initial_alignment.bam
-        rm ${sample_name}_initial_alignment.sam
-        samtools index ${sample_name}_initial_alignment.bam
-        samtools sort -@ 16 -n -o ${sample_name}_namesort.bam ${sample_name}_initial_alignment.bam
-        samtools fixmate -m ${sample_name}_namesort.bam ${sample_name}_fixmate.bam
-        samtools sort -@ 16  -o ${sample_name}_positionsort.bam ${sample_name}_fixmate.bam
-        samtools markdup --barcode-name -r ${sample_name}_positionsort.bam ${sample_name}_markdup.bam  
-        mv ${sample_name}_markdup.bam ${sample_name}_deduped_alignment.bam
-        samtools index ${sample_name}_deduped_alignment.bam
-        samtools faidx ${reference}
-        rm ${sample_name}_positionsort.bam
-        rm ${sample_name}_fixmate.bam
-        rm ${sample_name}_namesort.bam
-        """
-    } else if (dedup_method == "LOOSE") {
-        """
-        $alignment_command
-        samtools view -@ 16 -b ${sample_name}_initial_alignment.sam > ${sample_name}_initial_alignment.bam
-        samtools sort -@ 16 ${sample_name}_initial_alignment.bam > ${sample_name}_initial_alignment_sorted.bam
-        mv ${sample_name}_initial_alignment_sorted.bam ${sample_name}_initial_alignment.bam
-        rm ${sample_name}_initial_alignment.sam
-        samtools index ${sample_name}_initial_alignment.bam
-        samtools sort -@ 16 -n -o ${sample_name}_namesort.bam ${sample_name}_initial_alignment.bam
-        samtools fixmate -m ${sample_name}_namesort.bam ${sample_name}_fixmate.bam
-        samtools sort -@ 16  -o ${sample_name}_positionsort.bam ${sample_name}_fixmate.bam
-        samtools markdup  -r ${sample_name}_positionsort.bam ${sample_name}_markdup.bam
-        mv ${sample_name}_markdup.bam ${sample_name}_deduped_alignment.bam
-        samtools index ${sample_name}_deduped_alignment.bam
-        samtools faidx ${reference}
-        rm ${sample_name}_positionsort.bam
-        rm ${sample_name}_fixmate.bam
-        rm ${sample_name}_namesort.bam
-        """
-    } else if (dedup_method == "LMPCR") {
-        """
-        $alignment_command
-        samtools view -@ 16 -b ${sample_name}_initial_alignment.sam > ${sample_name}_initial_alignment.bam
-        samtools sort -@ 16 ${sample_name}_initial_alignment.bam > ${sample_name}_initial_alignment_sorted.bam
-        mv ${sample_name}_initial_alignment_sorted.bam ${sample_name}_initial_alignment.bam
-        rm ${sample_name}_initial_alignment.sam
-        samtools index ${sample_name}_initial_alignment.bam
-        cp ${sample_name}_initial_alignment.bam ${sample_name}_deduped_alignment.bam
-        samtools index ${sample_name}_deduped_alignment.bam
-        samtools faidx ${reference}
-        """
-    } 
+    """
+    $alignment_command
+    samtools view -@ 16 -b ${sample_name}_initial_alignment.sam > ${sample_name}_initial_alignment.bam
+    samtools sort -@ 16 ${sample_name}_initial_alignment.bam > ${sample_name}_initial_alignment_sorted.bam
+    mv ${sample_name}_initial_alignment_sorted.bam ${sample_name}_initial_alignment.bam
+    samtools index ${sample_name}_initial_alignment.bam
+    umi_tools dedup -I ${sample_name}_initial_alignment.bam --paired --umi-separator ":" -S ${sample_name}_deduped_alignment.bam --method unique
+    rm ${sample_name}_initial_alignment.sam
+    samtools index ${sample_name}_deduped_alignment.bam
+    samtools faidx ${reference}
+    """
 }
 
 process GET_TARGET_INFORMATION {
@@ -238,7 +197,7 @@ process ALIGN_TARGET_READS {
 
 process MEASURE_INTEGRATION {
     cache 'lenient'
-    publishDir "${params.outdir}/integration_stats_tables/${sample_name}", pattern: 'integration_stats.csv'
+    publishDir "${params.outdir}/integration_stats_tables/${sample_name}", pattern: '*integration_stats.csv'
     input:
         path target_info
         val sample_name 
@@ -438,6 +397,21 @@ process PARSE_SV_CALLING_OUTPUT {
     """
 }
 
+process CREATE_PYTHON_NOTEBOOK_REPORT {
+    cache 'lenient'
+    publishDir "${params.outdir}"
+
+    input:
+        path excel_file
+        path notebook_template
+    output:
+        path 'report.html'
+    script:
+    """
+    papermill ${notebook_template} report.ipynb -p results_file ${excel_file}
+    jupyter nbconvert --to html --no-input report.ipynb
+    """
+}
 
 workflow {
 
@@ -458,10 +432,10 @@ workflow {
 
          other parameters:
          reference genome: ${params.reference}
+         reference genome index: ${params.reference_index_location}
          initial mapper: ${params.initial_mapper}
          attP, left side: ${params.ATTP_REG}
          attP, right side: ${params.ATTP_PRIME}
-         deduplication method: ${params.deduplication_method}
          collapse condition: ${params.collapse_condition}
          --
          run as       : ${workflow.commandLine}
@@ -471,24 +445,11 @@ workflow {
          """
          .stripIndent()
 
-    Channel.fromPath(params.samplesheet)
-    .splitCsv(header: true, sep: ',')
-    .map { row -> 
-        def r1 = "${launchDir}/${row.fastq_dir}/*R1*.fastq.gz"
-        def r2 = "${launchDir}/${row.fastq_dir}/*R2*.fastq.gz"
-        tuple(
-            row.sample_name, 
-            file(r1), 
-            file(r2), 
-            file(row.probe_list),
-            row.group
-        )
-    }
-    .set { input_ch }
-
-    Channel.fromPath("${params.reference_index_location}/*.{fa,fasta}.*")
+    Channel.fromPath("${params.reference_index_location}/*.{fa,fasta,mmi}*")
     .collect()
     .set { reference_index_ch }
+
+    reference_index_ch.view()
 
     def reference_absolute_path = "${launchDir}/${params.reference}"
     def cargo_absolute_path = "${launchDir}/${params.cargo}"
@@ -498,51 +459,97 @@ workflow {
         reference_index_ch = create_reference_index.reference_index_files
     }
 
-    trimmed_and_merged_fastq = ADAPTER_AND_POLY_G_TRIM(input_ch, params.lmpcr_mode)
+    if (params.useBam) {
+    // Logic to handle BAM file input
+        Channel.fromPath(params.samplesheet)
+        .splitCsv(header: true, sep: ',')
+        .map { row -> 
+            def bam = "${launchDir}/${row.fastq_dir}/*.bam"
+            def bam_index = "${launchDir}/${row.fastq_dir}/*.bam.bai"
+            tuple(
+                row.sample_name, 
+                file(bam), 
+                file(bam_index), 
+                file(row.probe_list),
+                row.group
+        )
+    }
+    .set { bam_input_ch }
+    } else {
+        // Existing logic to handle FASTQ file input
+        Channel.fromPath(params.samplesheet)
+        .splitCsv(header: true, sep: ',')
+        .map { row -> 
+            def r1 = "${launchDir}/${row.fastq_dir}/*R1*.fastq.gz"
+            def r2 = "${launchDir}/${row.fastq_dir}/*R2*.fastq.gz"
+            tuple(
+                row.sample_name, 
+                file(r1), 
+                file(r2), 
+                file(row.probe_list),
+                row.group
+            )
+        }
+        .set { input_ch }
+    }
 
-    initial_alignment = ALIGN_READS(reference_absolute_path, reference_index_ch, trimmed_and_merged_fastq.trimmed_fastq, params.deduplication_method,params.initial_mapper)
+    if (params.useBam){
+        sample_name = bam_input_ch.map {
+           it[0]
+        }
+        bam_file = bam_input_ch.map {
+           it[1]
+        }
+        bam_index = bam_input_ch.map {
+           it[2]
+        }
+        group = bam_input_ch.map {
+           it[4]
+        }
 
-    probe_information = GET_TARGET_INFORMATION(input_ch, reference_absolute_path, cargo_absolute_path, params.ATTP_REG, params.ATTP_PRIME)
-
-    fastq_dir = EXTRACT_TARGET_READS(probe_information, initial_alignment.sample_name, initial_alignment.deduped_alignment_bam)
-
-    amplicons_dir = GENERATE_AMPLICONS(probe_information,initial_alignment.sample_name)
-
-    alignment_dir = ALIGN_TARGET_READS(probe_information, fastq_dir.sample_name, fastq_dir.extracted_reads_dir, amplicons_dir)
-
-    att_sequence_dirs = MEASURE_INTEGRATION(probe_information,alignment_dir.sample_name, alignment_dir.probe_read_alignments)
-
-    qc_summary = GATHER_QC_INFO(trimmed_and_merged_fastq.fastp_stats, fastq_dir.extracted_reads_dir)
-
-    cs2_attL_attR_dirs = RUN_CS2_FOR_INDELS(att_sequence_dirs.sample_name, att_sequence_dirs.attL_extracted_reads_dir, att_sequence_dirs.attR_extracted_reads_dir, att_sequence_dirs.beacon_extracted_reads_dir, amplicons_dir, probe_information)
-
-    indel_tables = GET_INDEL_INFO_FROM_CS2_OUTPUT(cs2_attL_attR_dirs.sample_name, cs2_attL_attR_dirs.cs2_attL_dir, cs2_attL_attR_dirs.cs2_attR_dir, cs2_attL_attR_dirs.cs2_beacon_dir)
-
-    COMBINE_INTEGRATION_AND_INDEL_INFO(att_sequence_dirs.sample_name, att_sequence_dirs.integration_stats_file, indel_tables.attL_indel_table, indel_tables.attR_indel_table)
-
-    def samplesheet_absolute_path = "${launchDir}/${params.samplesheet}"
-    
-    report_excel_file = GENERATE_REPORT(samplesheet_absolute_path,att_sequence_dirs.integration_stats_file.collect(), indel_tables.attL_indel_table.collect(), indel_tables.attR_indel_table.collect(), fastq_dir.read_counts_per_site_file.collect(), qc_summary.qc_summary_file.collect(), fastq_dir.extracted_reads_dir.collect(), params.collapse_condition, params.project_name)
-    
-    MULTIQC(trimmed_and_merged_fastq.fastp_stats
-        .flatten()  // Flatten the list
-        .filter { it.toString().endsWith('.json') }  // Filter out only the paths ending with .json
-        .collect()
-        .ifEmpty([]))
-
-    CREATE_PLOTS(report_excel_file.excel_output)
-
-
-    initial_alignment.deduped_alignment_bam
-        .groupTuple()
-        .set { grouped_bam_files }
-    
-
-    MERGE_ALIGNMENTS(grouped_bam_files)
-
-    sv_calling = RUN_SV_CALLING(trimmed_and_merged_fastq.trimmed_nonmerged_fastq, reference_absolute_path, initial_alignment.reference_fasta_fai)
-
-    PARSE_SV_CALLING_OUTPUT(sv_calling.sv_output)
+        bam_tuple_ch = bam_input_ch.map { items ->
+            return tuple(items[4], items[1], items[2])
+        }
+ 
+        probe_information = GET_TARGET_INFORMATION(bam_input_ch, reference_absolute_path, cargo_absolute_path, params.ATTP_REG, params.ATTP_PRIME)
+        fastq_dir = EXTRACT_TARGET_READS(probe_information, sample_name, bam_tuple_ch)
+        amplicons_dir = GENERATE_AMPLICONS(probe_information, sample_name)
+        alignment_dir = ALIGN_TARGET_READS(probe_information, fastq_dir.sample_name, fastq_dir.extracted_reads_dir, amplicons_dir)
+        att_sequence_dirs = MEASURE_INTEGRATION(probe_information,alignment_dir.sample_name, alignment_dir.probe_read_alignments)
+        cs2_attL_attR_dirs = RUN_CS2_FOR_INDELS(att_sequence_dirs.sample_name, att_sequence_dirs.attL_extracted_reads_dir, att_sequence_dirs.attR_extracted_reads_dir, att_sequence_dirs.beacon_extracted_reads_dir, amplicons_dir, probe_information)
+        indel_tables = GET_INDEL_INFO_FROM_CS2_OUTPUT(cs2_attL_attR_dirs.sample_name, cs2_attL_attR_dirs.cs2_attL_dir, cs2_attL_attR_dirs.cs2_attR_dir, cs2_attL_attR_dirs.cs2_beacon_dir)
+        COMBINE_INTEGRATION_AND_INDEL_INFO(att_sequence_dirs.sample_name, att_sequence_dirs.integration_stats_file, indel_tables.attL_indel_table, indel_tables.attR_indel_table)
+        
+        // def samplesheet_absolute_path = "${launchDir}/${params.samplesheet}"
+        // report_excel_file = GENERATE_REPORT(samplesheet_absolute_path,att_sequence_dirs.integration_stats_file.collect(), indel_tables.attL_indel_table.collect(), indel_tables.attR_indel_table.collect(), fastq_dir.read_counts_per_site_file.collect(), qc_summary.qc_summary_file.collect(), fastq_dir.extracted_reads_dir.collect(), params.collapse_condition, params.project_name)
+        // CREATE_PLOTS(report_excel_file.excel_output)
+        
+    } else {
+        // run these two when fastq input
+        probe_information = GET_TARGET_INFORMATION(input_ch, reference_absolute_path, cargo_absolute_path, params.ATTP_REG, params.ATTP_PRIME)
+        trimmed_and_merged_fastq = ADAPTER_AND_POLY_G_TRIM(input_ch, params.umi_in_header, params.umi_loc, params.umi_length,params.other_fastp_params)
+        initial_alignment = ALIGN_READS(reference_absolute_path, reference_index_ch, trimmed_and_merged_fastq.trimmed_fastq,params.initial_mapper)
+        fastq_dir = EXTRACT_TARGET_READS(probe_information, initial_alignment.sample_name, initial_alignment.deduped_alignment_bam)
+        amplicons_dir = GENERATE_AMPLICONS(probe_information,initial_alignment.sample_name)
+        alignment_dir = ALIGN_TARGET_READS(probe_information, fastq_dir.sample_name, fastq_dir.extracted_reads_dir, amplicons_dir)
+        att_sequence_dirs = MEASURE_INTEGRATION(probe_information,alignment_dir.sample_name, alignment_dir.probe_read_alignments)
+        qc_summary = GATHER_QC_INFO(trimmed_and_merged_fastq.fastp_stats, fastq_dir.extracted_reads_dir)
+        cs2_attL_attR_dirs = RUN_CS2_FOR_INDELS(att_sequence_dirs.sample_name, att_sequence_dirs.attL_extracted_reads_dir, att_sequence_dirs.attR_extracted_reads_dir, att_sequence_dirs.beacon_extracted_reads_dir, amplicons_dir, probe_information)
+        indel_tables = GET_INDEL_INFO_FROM_CS2_OUTPUT(cs2_attL_attR_dirs.sample_name, cs2_attL_attR_dirs.cs2_attL_dir, cs2_attL_attR_dirs.cs2_attR_dir, cs2_attL_attR_dirs.cs2_beacon_dir)
+        COMBINE_INTEGRATION_AND_INDEL_INFO(att_sequence_dirs.sample_name, att_sequence_dirs.integration_stats_file, indel_tables.attL_indel_table, indel_tables.attR_indel_table)
+        def samplesheet_absolute_path = "${launchDir}/${params.samplesheet}"
+        report_excel_file = GENERATE_REPORT(samplesheet_absolute_path,att_sequence_dirs.integration_stats_file.collect(), indel_tables.attL_indel_table.collect(), indel_tables.attR_indel_table.collect(), fastq_dir.read_counts_per_site_file.collect(), qc_summary.qc_summary_file.collect(), fastq_dir.extracted_reads_dir.collect(), params.collapse_condition, params.project_name)
+        MULTIQC(trimmed_and_merged_fastq.fastp_stats
+            .flatten()  // Flatten the list
+            .filter { it.toString().endsWith('.json') }  // Filter out only the paths ending with .json
+            .collect()
+            .ifEmpty([]))
+        //CREATE_PLOTS(report_excel_file.excel_output)
+        initial_alignment.deduped_alignment_bam
+            .groupTuple()
+            .set { grouped_bam_files }
+        CREATE_PYTHON_NOTEBOOK_REPORT(report_excel_file, params.notebook_template)
+    }
     
 }
 

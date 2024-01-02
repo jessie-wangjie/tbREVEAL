@@ -14,7 +14,7 @@ import sys
 import psycopg2
 
 def reverse_complement(seq):
-    complement = {'A': 'T', 'C': 'G', 'G': 'C', 'T': 'A'}
+    complement = {'A': 'T', 'C': 'G', 'G': 'C', 'T': 'A','N':'N'}
     return "".join(complement[base] for base in reversed(seq))
 
 def get_target_info(metadata_fn, attp_reg_seq, attp_prime_seq,reference_path,cargo_reference_path):
@@ -47,6 +47,12 @@ def get_target_info(metadata_fn, attp_reg_seq, attp_prime_seq,reference_path,car
             end = df[df.Target == id]['Stop'].iloc[0]
             strand = df[df.Target == id]['Strand'].iloc[0]
 
+            if '_' in chr:
+                continue
+
+            if 'chr' not in chr:
+                chr = 'chr' + chr    
+
             query = '''
             SELECT
                 bases, left_half, right_half, spacer_table.jmin, spacer_table.jmax, target_gene_name, direction_of_transcription
@@ -71,8 +77,6 @@ def get_target_info(metadata_fn, attp_reg_seq, attp_prime_seq,reference_path,car
 
             if result:
                 bases, left_half, right_half, spacer_jmin_cutsite, spacer_jmax_cutsite, closest_gene, direction_of_transcription = result
-
-            chr = 'chr' + str(chr)
             
             left_half_list = [int(x) for x in left_half.strip("[]").split(",")]
             right_half_list = [int(x) for x in right_half.strip("[]").split(",")]
@@ -145,11 +149,18 @@ def get_target_info(metadata_fn, attp_reg_seq, attp_prime_seq,reference_path,car
             same_strands.append('True')
 
         elif 'CAS' in id:
+
             target = df[df.Target == id]['Target'].iloc[0]
             chr = df[df.Target == id]['Chromosome'].iloc[0]
             start = df[df.Target == id]['Start'].iloc[0]
             end = df[df.Target == id]['Stop'].iloc[0]
             strand = df[df.Target == id]['Strand'].iloc[0]
+
+            if '_' in chr:
+                continue
+
+            if 'chr' not in chr:
+                chr = 'chr' + chr 
 
             query = '''
             SELECT
@@ -227,7 +238,10 @@ def get_target_info(metadata_fn, attp_reg_seq, attp_prime_seq,reference_path,car
             attL_quant_window_string = id + ':dinuc:' + str(attL_quant_lower_bound) + '-' + str(attL_quant_upper_bound) + ':0'
             attR_quant_window_string = id + ':dinuc:' + str(attR_quant_lower_bound) + '-' + str(attR_quant_upper_bound) + ':0'
 
-            gene_list = closest_gene.split(";")
+            if closest_gene is None:
+                gene_list = []
+            else:
+                gene_list = closest_gene.split(";")
 
             gene_name = [el.split(",")[0].strip() for el in gene_list]
             gene_strand = [el.split(",")[1].strip() for el in gene_list]

@@ -43,7 +43,7 @@ def collate_integration_files(project_info, integration_stats_filenames, project
         # Check if the file exists
         if os.path.exists(file_path):
             df = pd.read_csv(file_path)
-            df['Fidelity Percentage'] = 100*df[f'Complete P Integration Percentage'] / df[f'Complete Beacon Integration']
+            df['Fidelity Percentage'] = 100*df[f'Complete Beacon Integration']/df[f'Partial Beacon Integration']
             
             # Define the base columns
             base_columns = ['Target', 'Closest Gene Name', 'Gene Strand', 'Distance from Gene', 'Same Strand as Cryptic', 'Overlapping Feature', 'Threat Tier']
@@ -53,11 +53,11 @@ def collate_integration_files(project_info, integration_stats_filenames, project
             integration_cols = [col for col in df.columns if "Integration" in col or "Percentage" in col]
             reads_cols = [col for col in df.columns if "Reads" in col or 'reads' in col]
             if collapse_condition == 'Complete':
-                integration_short_cols = [col for col in df.columns if 'Complete P Integration Percentage' in col or 'Complete Reads' in col or 'Complete Beacon Reads' in col or 'WT Reads' in col]
+                integration_short_cols = [col for col in df.columns if 'Complete P Integration Percentage' in col or 'Complete Reads' in col or 'Complete Beacon Reads' or 'Partial Beacon Reads' in col or 'WT Reads' in col]
             elif collapse_condition == 'Partial':
-                integration_short_cols = [col for col in df.columns if 'Partial P Integration Percentage' in col or 'Partial Reads' in col or 'Partial Beacon Reads' in col or 'WT Reads' in col]
+                integration_short_cols = [col for col in df.columns if 'Partial P Integration Percentage' in col or 'Partial Reads' in col or 'Partial Beacon Reads' in col or 'WT Reads']
             elif collapse_condition == 'Cargo':
-                integration_short_cols = [col for col in df.columns if 'Cargo and P Integration Percentage' in col or 'Cargo Reads' in col or 'Complete Beacon Reads' in col or 'WT Reads' in col]
+                integration_short_cols = [col for col in df.columns if 'Cargo and P Integration Percentage' in col or 'Cargo Reads' in col or 'Complete Beacon Reads' in col or 'Partial Beacon Reads' in col or 'WT Reads' in col]
             
 
             # Rename columns to include sample name
@@ -84,11 +84,6 @@ def collate_integration_files(project_info, integration_stats_filenames, project
                 dfs_integration[group].append(df_integration)
                 dfs_reads[group].append(df_reads)
                 dfs_short_integration[group].append(df_integration_short)
-
-    
-
-    # Merge dataframes horizontally
-
 
     for key in dfs_integration:
         temp_df = pd.concat(dfs_integration[key],axis=1)
@@ -126,17 +121,23 @@ def collate_integration_files(project_info, integration_stats_filenames, project
         temp_df = pd.concat([base_columns_df,temp_df],axis=1)
         attL_total = temp_df.filter(like='AttL').sum(axis=1)
         attR_total = temp_df.filter(like='AttR').sum(axis=1)
-        beacon_total = temp_df.filter(like='Beacon').sum(axis=1)
+        partial_beacon_total = temp_df.filter(like='Partial Beacon Reads').sum(axis=1)
+        complete_beacon_total = temp_df.filter(like='Complete Beacon Reads').sum(axis=1)
         wt_total = temp_df.filter(like='WT').sum(axis=1)
         max_attL_attR = np.max(pd.DataFrame({"attL": attL_total, "attR": attR_total}),axis=1)
-        total_conversion_percentage = 100*(max_attL_attR) / (max_attL_attR + beacon_total)
-        total_PGI_percentage = 100*(max_attL_attR) / (max_attL_attR + beacon_total + wt_total)
-        total_beacon_percentage = 100*(beacon_total + max_attL_attR) / (max_attL_attR + beacon_total + wt_total)
-        df_by_condition = pd.DataFrame({f'AttL {key} Total': attL_total, 
-                                    f'AttR {key} Total': attR_total, 
-                                    f'Beacon {key} Total': beacon_total, 
-                                    f'WT {key} Total': wt_total,
-                                    f'{key} Beacon %': total_beacon_percentage,
+        total_conversion_percentage = 100*(max_attL_attR) / (max_attL_attR + complete_beacon_total)
+        total_PGI_percentage = 100*(max_attL_attR) / (max_attL_attR + complete_beacon_total + wt_total)
+        total_beacon_percentage = 100*(partial_beacon_total + max_attL_attR) / (max_attL_attR + partial_beacon_total + wt_total)
+        complete_beacon_percentage = 100*(complete_beacon_total + max_attL_attR) / (max_attL_attR + complete_beacon_total + wt_total)
+        beacon_fidelity_percentage = 100*complete_beacon_percentage/total_beacon_percentage
+        df_by_condition = pd.DataFrame({f'{key} AttL Total': attL_total, 
+                                    f'{key} AttR Total': attR_total, 
+                                    f'{key} Partial Beacon Total': partial_beacon_total,
+                                    f'{key} Complete Beacon Total': complete_beacon_total,
+                                    f'{key} WT Total': wt_total,
+                                    f'{key} Total Beacon %': total_beacon_percentage,
+                                    f'{key} Complete Beacon %': complete_beacon_percentage,
+                                    f'{key} Beacon Fidelity %': beacon_fidelity_percentage,
                                     f'{key} PGI %': total_PGI_percentage,
                                     f'{key} Conversion %':total_conversion_percentage})
         df_by_condition.reset_index(drop=True,inplace=True)
@@ -145,9 +146,6 @@ def collate_integration_files(project_info, integration_stats_filenames, project
     dfs_by_condition_concat = pd.concat(dfs_by_condition,axis=1)
     dfs_by_condition_concat = pd.concat([base_columns_df,dfs_by_condition_concat],axis=1)
     dfs_by_condition_concat = dfs_by_condition_concat.fillna(0)
-
-    
-    
     
     output_fn = f'{project_name}_results.xlsx'
     # Save the two sheets into an Excel file
