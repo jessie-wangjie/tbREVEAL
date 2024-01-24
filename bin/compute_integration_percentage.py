@@ -12,6 +12,7 @@ from utils.base import *
 import subprocess
 import sys
 import psycopg2
+import re
 
 
 import os
@@ -29,7 +30,7 @@ def compute_integration_percentage(target_info, alignment_dir, sample_name):
     target_info_df = pd.read_csv(target_info)
     integration_dict = {}
 
-    full_attb_sequence = 'GGCTTGTCGACGACGGCGGTCTCCGTCGTCAGGATCAT'
+    full_attb_sequence = 'GGCTTGTCGACGACGGCG..CTCCGTCGTCAGGATCAT'
 
     def get_umi(read):
         return read.query_name
@@ -106,9 +107,9 @@ def compute_integration_percentage(target_info, alignment_dir, sample_name):
                     (read.reference_name == 'attR_amplicon' and 'AA' in row['id'] and alignment_start < 10 and alignment_end > 57, 
                      ['partial_attR', 'complete_attR', 'cargo_attR']),
 
-                    (read.reference_name == 'beacon_amplicon' and 'AA' in row['id'] and full_attb_sequence not in seq, 
+                    (read.reference_name == 'beacon_amplicon' and 'AA' in row['id'] and not re.search(full_attb_sequence, seq), 
                      ['partial_beacon']),
-                    (read.reference_name == 'beacon_amplicon' and 'AA' in row['id'] and full_attb_sequence in seq, 
+                    (read.reference_name == 'beacon_amplicon' and 'AA' in row['id'] and re.search(full_attb_sequence, seq), 
                      ['partial_beacon', 'complete_beacon']),
 
                     (read.reference_name == 'wt_amplicon', ['wt'])
@@ -150,8 +151,6 @@ def compute_integration_percentage(target_info, alignment_dir, sample_name):
             100 if 'CAS' in row['id'] else calc_percentage(counts['partial_beacon'] + counts['partial_attL'] + counts['partial_attR'], partial_total),
             100 if 'CAS' in row['id'] else calc_percentage(counts['complete_beacon'] + counts['complete_attL'] + counts['complete_attR'], complete_P_total)
         ) + tuple(row[key] for key in ['gene_name', 'gene_strand', 'gene_distance', 'same_strand', 'overlapping_feature', 'threat_tier'])
-
-    #print(integration_dict)
 
     return integration_dict
 

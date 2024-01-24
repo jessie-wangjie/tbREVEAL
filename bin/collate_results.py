@@ -44,6 +44,9 @@ def collate_integration_files(project_info, integration_stats_filenames, project
         if os.path.exists(file_path):
             df = pd.read_csv(file_path)
             df['Fidelity Percentage'] = 100*df[f'Complete Beacon Integration']/df[f'Partial Beacon Integration']
+            df['Max Partial Recombination'] = df[['Number of AttL Partial Reads','Number of AttR Partial Reads']].max(axis=1)
+            df['Max Complete Recombination'] = df[['Number of AttL Complete Reads','Number of AttR Complete Reads']].max(axis=1)
+            df['Max Cargo Recombination'] = df[['Number of AttL Cargo Reads','Number of AttR Cargo Reads']].max(axis=1)
             
             # Define the base columns
             base_columns = ['Target', 'Closest Gene Name', 'Gene Strand', 'Distance from Gene', 'Same Strand as Cryptic', 'Overlapping Feature', 'Threat Tier']
@@ -53,11 +56,11 @@ def collate_integration_files(project_info, integration_stats_filenames, project
             integration_cols = [col for col in df.columns if "Integration" in col or "Percentage" in col]
             reads_cols = [col for col in df.columns if "Reads" in col or 'reads' in col]
             if collapse_condition == 'Complete':
-                integration_short_cols = [col for col in df.columns if 'Complete P Integration Percentage' in col or 'Complete Reads' in col or 'Complete Beacon Reads' or 'Partial Beacon Reads' in col or 'WT Reads' in col]
+                integration_short_cols = [col for col in df.columns if 'Complete P Integration Percentage' in col or 'Complete Reads' in col or 'Complete Beacon Reads' or 'Partial Beacon Reads' in col or 'WT Reads' in col or 'Max Complete Recombination' in col]
             elif collapse_condition == 'Partial':
-                integration_short_cols = [col for col in df.columns if 'Partial P Integration Percentage' in col or 'Partial Reads' in col or 'Partial Beacon Reads' in col or 'WT Reads']
+                integration_short_cols = [col for col in df.columns if 'Partial P Integration Percentage' in col or 'Partial Reads' in col or 'Partial Beacon Reads' in col or 'WT Reads' in col or 'Max Partial Recombination' in col]
             elif collapse_condition == 'Cargo':
-                integration_short_cols = [col for col in df.columns if 'Cargo and P Integration Percentage' in col or 'Cargo Reads' in col or 'Complete Beacon Reads' in col or 'Partial Beacon Reads' in col or 'WT Reads' in col]
+                integration_short_cols = [col for col in df.columns if 'Cargo and P Integration Percentage' in col or 'Cargo Reads' in col or 'Complete Beacon Reads' in col or 'Partial Beacon Reads' in col or 'WT Reads' in col or 'Max Cargo Recombination' in col]
             
 
             # Rename columns to include sample name
@@ -119,19 +122,23 @@ def collate_integration_files(project_info, integration_stats_filenames, project
     for key in merged_short_integration_dfs:
         temp_df = pd.concat(merged_short_integration_dfs[key],axis=1)
         temp_df = pd.concat([base_columns_df,temp_df],axis=1)
-        attL_total = temp_df.filter(like='AttL').sum(axis=1)
-        attR_total = temp_df.filter(like='AttR').sum(axis=1)
+        attL_total = temp_df.filter(like=f'AttL {collapse_condition}').sum(axis=1)
+        attR_total = temp_df.filter(like=f'AttR {collapse_condition}').sum(axis=1)
+
+        att_max_total = temp_df.filter(like=f'Max {collapse_condition} Recombination').sum(axis=1)
+
         partial_beacon_total = temp_df.filter(like='Partial Beacon Reads').sum(axis=1)
         complete_beacon_total = temp_df.filter(like='Complete Beacon Reads').sum(axis=1)
         wt_total = temp_df.filter(like='WT').sum(axis=1)
         max_attL_attR = np.max(pd.DataFrame({"attL": attL_total, "attR": attR_total}),axis=1)
-        total_conversion_percentage = 100*(max_attL_attR) / (max_attL_attR + complete_beacon_total)
-        total_PGI_percentage = 100*(max_attL_attR) / (max_attL_attR + complete_beacon_total + wt_total)
-        total_beacon_percentage = 100*(partial_beacon_total + max_attL_attR) / (max_attL_attR + partial_beacon_total + wt_total)
-        complete_beacon_percentage = 100*(complete_beacon_total + max_attL_attR) / (max_attL_attR + complete_beacon_total + wt_total)
+        total_conversion_percentage = 100*(att_max_total) / (att_max_total + complete_beacon_total)
+        total_PGI_percentage = 100*(att_max_total) / (att_max_total + complete_beacon_total + wt_total)
+        total_beacon_percentage = 100*(partial_beacon_total + att_max_total) / (att_max_total + partial_beacon_total + wt_total)
+        complete_beacon_percentage = 100*(complete_beacon_total + att_max_total) / (att_max_total + complete_beacon_total + wt_total)
         beacon_fidelity_percentage = 100*complete_beacon_percentage/total_beacon_percentage
         df_by_condition = pd.DataFrame({f'{key} AttL Total': attL_total, 
                                     f'{key} AttR Total': attR_total, 
+                                    f'{key} Recombined Total': att_max_total,
                                     f'{key} Partial Beacon Total': partial_beacon_total,
                                     f'{key} Complete Beacon Total': complete_beacon_total,
                                     f'{key} WT Total': wt_total,

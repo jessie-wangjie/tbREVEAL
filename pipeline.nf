@@ -36,26 +36,26 @@ process ADAPTER_AND_POLY_G_TRIM {
         path "${R1}"
         path "${R2}"
         path "${metadata}"
-        tuple val(sample_name), path("${sample_name}_trimmed_R1.fastq.gz"), path("${sample_name}_trimmed_R2.fastq.gz"), emit: trimmed_nonmerged_fastq
+        // tuple val(sample_name), path("${sample_name}_trimmed_R1.fastq.gz"), path("${sample_name}_trimmed_R2.fastq.gz"), emit: trimmed_nonmerged_fastq
         tuple val(sample_name), val(group), path("${sample_name}_trimmed.fastq.bgz"), emit: trimmed_fastq
         tuple val(sample_name), path("${sample_name}_fastp.json"), emit: fastp_stats
 
     script:
         if (umi_in_header == false) {
             """
-            fastp -m -c --include_unmerged --low_complexity_filter ${other_fastp_params} --overlap_len_require 10 -i ${R1} -I ${R2} --merged_out ${sample_name}_trimmed.fastq.gz -w 16 -g -j ${sample_name}_fastp.json -U --umi_loc=${umi_loc} --umi_len=${umi_length}
+            fastp -m -c --include_unmerged --dont_eval_duplication --low_complexity_filter ${other_fastp_params} --overlap_len_require 10 -i ${R1} -I ${R2} --merged_out ${sample_name}_trimmed.fastq.gz -w 16 -g -j ${sample_name}_fastp.json -U --umi_loc=${umi_loc} --umi_len=${umi_length}
 
             gunzip -c ${sample_name}_trimmed.fastq.gz | bgzip -@ 8 > ${sample_name}_trimmed.fastq.bgz
 
-            fastp --low_complexity_filter ${other_fastp_params} -i ${R1} -I ${R2} -o ${sample_name}_trimmed_R1.fastq.gz -O ${sample_name}_trimmed_R2.fastq.gz -w 16 -U --umi_loc=${umi_loc} --umi_len=${umi_length}
+            # fastp --low_complexity_filter --dont_eval_duplication ${other_fastp_params} -i ${R1} -I ${R2} -o ${sample_name}_trimmed_R1.fastq.gz -O ${sample_name}_trimmed_R2.fastq.gz -w 16 -U --umi_loc=${umi_loc} --umi_len=${umi_length}
             """ 
         } else {
             """
-            fastp -m -c --include_unmerged --low_complexity_filter ${other_fastp_params} --overlap_len_require 10 -i ${R1} -I ${R2} --merged_out ${sample_name}_trimmed.fastq.gz -w 16 -g -j ${sample_name}_fastp.json
+            fastp -m -c --include_unmerged --dont_eval_duplication --low_complexity_filter ${other_fastp_params} --overlap_len_require 10 -i ${R1} -I ${R2} --merged_out ${sample_name}_trimmed.fastq.gz -w 16 -g -j ${sample_name}_fastp.json
 
             gunzip -c ${sample_name}_trimmed.fastq.gz | bgzip -@ 8 > ${sample_name}_trimmed.fastq.bgz
 
-            fastp --low_complexity_filter ${other_fastp_params} -i ${R1} -I ${R2} -o ${sample_name}_trimmed_R1.fastq.gz -O ${sample_name}_trimmed_R2.fastq.gz -w 16
+            # fastp --low_complexity_filter --dont_eval_duplication ${other_fastp_params} -i ${R1} -I ${R2} -o ${sample_name}_trimmed_R1.fastq.gz -O ${sample_name}_trimmed_R2.fastq.gz -w 16
             """ 
         }
     }
@@ -68,7 +68,7 @@ process CREATE_REFERENCE_INDEX {
         val mapper
 
     output:
-        path ['*.fa.*', '*.mmi'], emit: reference_index_files
+        path ['*.fa.*', '*.fasta.*', '*.mmi'], emit: reference_index_files
 
     script:
     if (mapper == "minimap2") {
@@ -445,11 +445,10 @@ workflow {
          """
          .stripIndent()
 
-    Channel.fromPath("${params.reference_index_location}/*.{fa,fasta,mmi}*")
+    Channel.fromPath("${params.reference_index_location}/*.{fa,fasta,mmi}.*")
     .collect()
     .set { reference_index_ch }
 
-    reference_index_ch.view()
 
     def reference_absolute_path = "${launchDir}/${params.reference}"
     def cargo_absolute_path = "${launchDir}/${params.cargo}"
@@ -528,7 +527,8 @@ workflow {
         // run these two when fastq input
         probe_information = GET_TARGET_INFORMATION(input_ch, reference_absolute_path, cargo_absolute_path, params.ATTP_REG, params.ATTP_PRIME)
         trimmed_and_merged_fastq = ADAPTER_AND_POLY_G_TRIM(input_ch, params.umi_in_header, params.umi_loc, params.umi_length,params.other_fastp_params)
-        initial_alignment = ALIGN_READS(reference_absolute_path, reference_index_ch, trimmed_and_merged_fastq.trimmed_fastq,params.initial_mapper)
+        // prevent oom errors on large datasets when align + clean reads are running at the same time
+        initial_alignment = ALIGN_READS(reference_absolute_path, reference_index_ch, trimmed_and_merged_fastq.trimmed_fastq, params.initial_mapper)
         fastq_dir = EXTRACT_TARGET_READS(probe_information, initial_alignment.sample_name, initial_alignment.deduped_alignment_bam)
         amplicons_dir = GENERATE_AMPLICONS(probe_information,initial_alignment.sample_name)
         alignment_dir = ALIGN_TARGET_READS(probe_information, fastq_dir.sample_name, fastq_dir.extracted_reads_dir, amplicons_dir)

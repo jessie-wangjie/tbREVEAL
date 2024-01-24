@@ -13,7 +13,7 @@ WORKDIR /app
 COPY environment.yml .
 
 # Install necessary packages for Miniconda installation
-RUN apt-get update && apt-get install -y wget bzip2 procps && \
+RUN apt-get update && apt-get install -y wget bzip2 procps python3.10 && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
 
@@ -22,8 +22,6 @@ RUN micromamba shell init -s bash -p /usr/local
 
 # Use micromamba to create an environment from the environment.yml file
 RUN micromamba install -y -n base -f environment.yml && micromamba clean --all --yes
-
-RUN micromamba run -n base pip install git+https://github.com/pinellolab/AmpUMI.git
 
 COPY bin/ ./bin/
 RUN chmod 755 ./bin/*
