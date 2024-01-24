@@ -43,7 +43,7 @@ process ADAPTER_AND_POLY_G_TRIM {
     script:
         if (umi_in_header == false) {
             """
-            fastp -m -c --include_unmerged --dont_eval_duplication --low_complexity_filter ${other_fastp_params} --overlap_len_require 10 -i ${R1} -I ${R2} --merged_out ${sample_name}_trimmed.fastq.gz -w 16 -g -j ${sample_name}_fastp.json -U --umi_loc=${umi_loc} --umi_len=${umi_length}
+            fastp -m -c --include_unmerged --dont_eval_duplication --disable_adapter_trimming --low_complexity_filter ${other_fastp_params} --overlap_len_require 10 -i ${R1} -I ${R2} --merged_out ${sample_name}_trimmed.fastq.gz -w 16 -g -j ${sample_name}_fastp.json -U --umi_loc=${umi_loc} --umi_len=${umi_length}
 
             gunzip -c ${sample_name}_trimmed.fastq.gz | bgzip -@ 8 > ${sample_name}_trimmed.fastq.bgz
 
@@ -51,7 +51,7 @@ process ADAPTER_AND_POLY_G_TRIM {
             """ 
         } else {
             """
-            fastp -m -c --include_unmerged --dont_eval_duplication --low_complexity_filter ${other_fastp_params} --overlap_len_require 10 -i ${R1} -I ${R2} --merged_out ${sample_name}_trimmed.fastq.gz -w 16 -g -j ${sample_name}_fastp.json
+            fastp -m -c --include_unmerged --dont_eval_duplication --disable_adapter_trimming --low_complexity_filter ${other_fastp_params} --overlap_len_require 10 -i ${R1} -I ${R2} --merged_out ${sample_name}_trimmed.fastq.gz -w 16 -g -j ${sample_name}_fastp.json
 
             gunzip -c ${sample_name}_trimmed.fastq.gz | bgzip -@ 8 > ${sample_name}_trimmed.fastq.bgz
 
@@ -531,7 +531,7 @@ workflow {
         initial_alignment = ALIGN_READS(reference_absolute_path, reference_index_ch, trimmed_and_merged_fastq.trimmed_fastq, params.initial_mapper)
         fastq_dir = EXTRACT_TARGET_READS(probe_information, initial_alignment.sample_name, initial_alignment.deduped_alignment_bam)
         amplicons_dir = GENERATE_AMPLICONS(probe_information,initial_alignment.sample_name)
-        alignment_dir = ALIGN_TARGET_READS(probe_information, fastq_dir.sample_name, fastq_dir.extracted_reads_dir, amplicons_dir)
+        alignment_dir = ALIGN_TARGET_READS(probe_information, fastq_dir.sample_name.collect(), fastq_dir.extracted_reads_dir.collect(), amplicons_dir)
         att_sequence_dirs = MEASURE_INTEGRATION(probe_information,alignment_dir.sample_name, alignment_dir.probe_read_alignments)
         qc_summary = GATHER_QC_INFO(trimmed_and_merged_fastq.fastp_stats, fastq_dir.extracted_reads_dir)
         cs2_attL_attR_dirs = RUN_CS2_FOR_INDELS(att_sequence_dirs.sample_name, att_sequence_dirs.attL_extracted_reads_dir, att_sequence_dirs.attR_extracted_reads_dir, att_sequence_dirs.beacon_extracted_reads_dir, amplicons_dir, probe_information)
