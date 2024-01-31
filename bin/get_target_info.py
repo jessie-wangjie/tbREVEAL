@@ -92,7 +92,7 @@ def get_target_info(metadata_fn, attp_reg_seq, attp_prime_seq,reference_path,car
 
             beacon_sequence = beacon_beginning_sequence + bases + beacon_end_sequence
 
-            wt_command = f'samtools faidx {reference_path} {chr}:{int(spacer_jmin_cutsite)}-{int(spacer_jmin_cutsite)+len(beacon_sequence)}'
+            wt_command = f'samtools faidx {reference_path} {chr}:{int(spacer_jmin_cutsite)}-{int(spacer_jmin_cutsite)}'
 
             wt_sequence = ''.join(subprocess.check_output(wt_command, shell=True).decode(sys.stdout.encoding).split('\n')[1:]).upper()
             attL = (b_reg_sequence + attp_prime_seq).upper()

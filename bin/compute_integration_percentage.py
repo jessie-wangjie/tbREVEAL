@@ -30,7 +30,8 @@ def compute_integration_percentage(target_info, alignment_dir, sample_name):
     target_info_df = pd.read_csv(target_info)
     integration_dict = {}
 
-    full_attb_sequence = 'GGCTTGTCGACGACGGCG..CTCCGTCGTCAGGATCAT'
+    p_reg_sequence = 'GTGGTTTGTCTGGTCAACCACCGCG'
+    p_prime_sequence = 'CTCAGTGGTGTACGGTACAAACCCA'
 
     def get_umi(read):
         return read.query_name
@@ -51,10 +52,13 @@ def compute_integration_percentage(target_info, alignment_dir, sample_name):
         attR_records = {}
         beacon_records = {}
 
+        full_attb_sequence = row['beacon'][20:len(row['beacon'])-21]
+
         categories = {
+            'ambiguous_attL':set(), 'ambiguous_attR':set(),
             'partial_attL': set(), 'complete_attL': set(), 'cargo_attL': set(),
             'partial_attR': set(), 'complete_attR': set(), 'cargo_attR': set(),
-            'partial_beacon': set(), 'complete_beacon': set(), 'wt': set()
+            'ambiguous_beacon': set(), 'partial_beacon': set(), 'complete_beacon': set(), 'wt': set()
         }
 
         with pysam.AlignmentFile(alignment_file, "r") as alignment:
@@ -73,18 +77,18 @@ def compute_integration_percentage(target_info, alignment_dir, sample_name):
                 
                 rules = [
                     (read.reference_name == 'attL_amplicon' and 'CAS' in row['id'] and alignment_start < 32 and alignment_end > 54, 
-                     ['partial_attL']),
-                    (read.reference_name == 'attL_amplicon' and 'CAS' in row['id'] and alignment_start < 32 and alignment_end > 69, 
-                     ['partial_attL', 'complete_attL']),
-                    (read.reference_name == 'attL_amplicon' and 'CAS' in row['id'] and alignment_start < 32 and alignment_end > 79, 
-                     ['partial_attL', 'complete_attL', 'cargo_attL']),
+                     ['ambiguous_attL']),
+                    (read.reference_name == 'attL_amplicon' and 'CAS' in row['id'] and alignment_start < 32 and alignment_end > 69 and p_prime_sequence in seq, 
+                     ['complete_attL']),
+                    (read.reference_name == 'attL_amplicon' and 'CAS' in row['id'] and alignment_start < 32 and alignment_end > 79 and p_prime_sequence in seq, 
+                     ['complete_attL', 'cargo_attL']),
 
                     (read.reference_name == 'attR_amplicon' and 'CAS' in row['id'] and alignment_start < 30 and alignment_end > 57, 
-                     ['partial_attR']),
-                    (read.reference_name == 'attR_amplicon' and 'CAS' in row['id'] and alignment_start < 20 and alignment_end > 57, 
-                     ['partial_attR', 'complete_attR']),
-                    (read.reference_name == 'attR_amplicon' and 'CAS' in row['id'] and alignment_start < 10 and alignment_end > 57, 
-                     ['partial_attR', 'complete_attR', 'cargo_attR']),
+                     ['ambiguous_attR']),
+                    (read.reference_name == 'attR_amplicon' and 'CAS' in row['id'] and alignment_start < 20 and alignment_end > 57 and p_reg_sequence in seq, 
+                     ['complete_attR']),
+                    (read.reference_name == 'attR_amplicon' and 'CAS' in row['id'] and alignment_start < 10 and alignment_end > 57 and p_reg_sequence in seq, 
+                     ['complete_attR', 'cargo_attR']),
 
                     (read.reference_name == 'beacon_amplicon' and 'CAS' in row['id'] and ((alignment_start <= 21 and alignment_end < 66) or (alignment_start > 21 and alignment_end >= 66)), 
                      ['partial_beacon']),
@@ -94,27 +98,39 @@ def compute_integration_percentage(target_info, alignment_dir, sample_name):
                     # slightly different rule compared to CAS sites because cryptic B based on 46 bp attB and the beacon written is 38 bp
                     # note the difference in alignment ends (15 bp versus 11 bp)
                     (read.reference_name == 'attL_amplicon' and 'AA' in row['id'] and alignment_start < 12 and alignment_end > 34, 
-                     ['partial_attL']),
-                    (read.reference_name == 'attL_amplicon' and 'AA' in row['id'] and alignment_start < 12 and alignment_end > 45, 
-                     ['partial_attL', 'complete_attL']),
-                    (read.reference_name == 'attL_amplicon' and 'AA' in row['id'] and alignment_start < 12 and alignment_end > 55, 
-                     ['partial_attL', 'complete_attL', 'cargo_attL']),
+                     ['ambiguous_attL']),
+                    (read.reference_name == 'attL_amplicon' and 'AA' in row['id'] and alignment_start < 12 and alignment_end > 45 and p_prime_sequence in seq, 
+                     ['complete_attL']),
+                    (read.reference_name == 'attL_amplicon' and 'AA' in row['id'] and alignment_start < 12 and alignment_end > 55 and p_prime_sequence in seq, 
+                     ['complete_attL', 'cargo_attL']),
 
                     (read.reference_name == 'attR_amplicon' and 'AA' in row['id'] and alignment_start < 30 and alignment_end > 57, 
-                     ['partial_attR']),
-                    (read.reference_name == 'attR_amplicon' and 'AA' in row['id'] and alignment_start < 20 and alignment_end > 57, 
-                     ['partial_attR', 'complete_attR']),
-                    (read.reference_name == 'attR_amplicon' and 'AA' in row['id'] and alignment_start < 10 and alignment_end > 57, 
-                     ['partial_attR', 'complete_attR', 'cargo_attR']),
+                     ['ambiguous_attR']),
+                    (read.reference_name == 'attR_amplicon' and 'AA' in row['id'] and alignment_start < 20 and alignment_end > 57 and p_reg_sequence in seq, 
+                     ['complete_attR']),
+                    (read.reference_name == 'attR_amplicon' and 'AA' in row['id'] and alignment_start < 10 and alignment_end > 57 and p_reg_sequence in seq, 
+                     ['complete_attR', 'cargo_attR']),
 
-                    (read.reference_name == 'beacon_amplicon' and 'AA' in row['id'] and not re.search(full_attb_sequence, seq), 
+                    (read.reference_name == 'beacon_amplicon' and 'AA' in row['id'] and alignment_start > 21 or alignment_end < (21 + len(full_attb_sequence)), 
+                     ['ambiguous_beacon']),
+                    (read.reference_name == 'beacon_amplicon' and 'AA' in row['id'] and alignment_start <= 21 and alignment_end >= (21 + len(full_attb_sequence)) and bool(re.search(full_attb_sequence, seq)) == False, 
                      ['partial_beacon']),
-                    (read.reference_name == 'beacon_amplicon' and 'AA' in row['id'] and re.search(full_attb_sequence, seq), 
-                     ['partial_beacon', 'complete_beacon']),
+                    (read.reference_name == 'beacon_amplicon' and 'AA' in row['id'] and alignment_start <= 21 and alignment_end >= (21 + len(full_attb_sequence)) and bool(re.search(full_attb_sequence, seq)) == True, 
+                     ['complete_beacon']),
 
                     (read.reference_name == 'wt_amplicon', ['wt'])
                 ]
 
+                # if row['id'] == 'AA876':
+                #     if read.reference_name == 'beacon_amplicon':
+                #         print(read.seq)
+                #         print(alignment_start)
+                #         print(alignment_end)
+                #         print(rules)
+                #         print(bool(re.search(full_attb_sequence, seq)))
+                #         print('-----')
+                        
+                        
 
                 for condition, cat_keys in rules:
                     if condition:
@@ -135,6 +151,8 @@ def compute_integration_percentage(target_info, alignment_dir, sample_name):
                 SeqIO.write(records.values(), path, "fastq")
 
         counts = {k: len(v) for k, v in categories.items()}
+        beacon_total = sum([counts[key] for key in ['partial_beacon', 'complete_beacon']])
+        beacon_placement_denominator = sum([counts[key] for key in ['complete_attL', 'complete_attR', 'partial_beacon', 'complete_beacon','wt']])
         partial_total = sum([counts[key] for key in ['partial_attL', 'partial_attR', 'partial_beacon', 'wt']])
         complete_P_total = sum([counts[key] for key in ['complete_attL', 'complete_attR', 'complete_beacon', 'wt']])
         cargo_P_total = sum([counts[key] for key in ['cargo_attL', 'cargo_attR', 'complete_beacon', 'wt']])
@@ -143,13 +161,21 @@ def compute_integration_percentage(target_info, alignment_dir, sample_name):
             return (numerator / denominator * 100) if denominator > 0 else 0.0
 
         integration_dict[row['id']] = (
-            counts['wt'], counts['partial_attL'], counts['complete_attL'], counts['cargo_attL'],
-            counts['partial_attR'], counts['complete_attR'], counts['cargo_attR'], counts['partial_beacon'],counts['complete_beacon'],
+            counts['wt'], 
+            counts['partial_attL'], 
+            counts['complete_attL'], 
+            counts['cargo_attL'],
+            counts['partial_attR'], 
+            counts['complete_attR'], 
+            counts['cargo_attR'], 
+            counts['partial_beacon'],
+            counts['partial_beacon'] if 'CAS' in row['id'] else counts['complete_beacon'],
             calc_percentage(counts['partial_attL'] + counts['partial_attR'], partial_total),
             calc_percentage(counts['complete_attL'] + counts['complete_attR'], complete_P_total),
             calc_percentage(counts['cargo_attL'] + counts['cargo_attR'], cargo_P_total),
-            100 if 'CAS' in row['id'] else calc_percentage(counts['partial_beacon'] + counts['partial_attL'] + counts['partial_attR'], partial_total),
-            100 if 'CAS' in row['id'] else calc_percentage(counts['complete_beacon'] + counts['complete_attL'] + counts['complete_attR'], complete_P_total)
+            100 if 'CAS' in row['id'] else calc_percentage(counts['partial_beacon'] + counts['complete_beacon'] + counts['complete_attL'] + counts['complete_attR'], beacon_placement_denominator),
+            100 if 'CAS' in row['id'] else calc_percentage(counts['complete_beacon'] + counts['complete_attL'] + counts['complete_attR'], beacon_placement_denominator),
+            100 if 'CAS' in row['id'] else calc_percentage(counts['complete_beacon'], beacon_total),
         ) + tuple(row[key] for key in ['gene_name', 'gene_strand', 'gene_distance', 'same_strand', 'overlapping_feature', 'threat_tier'])
 
     return integration_dict
@@ -160,11 +186,11 @@ def write_integration_percentage(integration_dict, sample_name):
     filename = f'{sample_name}_integration_stats.csv'
     with open(filename, 'w') as file:
         # Write the header row
-        file.write('Target,Number of WT Reads,Number of AttL Partial Reads,Number of AttL Complete Reads,Number of AttL Cargo Reads,Number of AttR Partial Reads,Number of AttR Complete Reads,Number of AttR Cargo Reads,Number of Partial Beacon Reads,Number of Complete Beacon Reads,Partial P Integration Percentage,Complete P Integration Percentage,Cargo and P Integration Percentage,Partial Beacon Integration,Complete Beacon Integration,Closest Gene Name,Gene Strand,Distance from Gene,Same Strand as Cryptic,Overlapping Feature,Threat Tier\n')
+        file.write('Target,Number of WT Reads,Number of AttL Complete Reads,Number of AttL Cargo Reads,Number of AttR Partial Reads,Number of AttR Complete Reads,Number of AttR Cargo Reads,Number of Partial Beacon Reads,Number of Complete Beacon Reads,Partial P Integration Percentage,Complete P Integration Percentage,Cargo and P Integration Percentage,Partial Beacon Placement,Complete Beacon Placement,Beacon Fidelity,Closest Gene Name,Gene Strand,Distance from Gene,Same Strand as Cryptic,Overlapping Feature,Threat Tier\n')
 
         # Write the data rows
         for key, value in integration_dict.items():
-            file.write(f'{key},{value[0]},{value[1]},{value[2]},{value[3]},{value[4]},{value[5]},{value[6]},{value[7]},{value[8]},{value[9]},{value[10]},{value[11]},{value[12]},{value[13]},{value[14]},{value[15]},{value[16]},{value[17]},{value[18]},{value[19]}\n')
+            file.write(f'{key},{value[1]},{value[2]},{value[3]},{value[4]},{value[5]},{value[6]},{value[7]},{value[8]},{value[9]},{value[10]},{value[11]},{value[12]},{value[13]},{value[14]},{value[15]},{value[16]},{value[17]},{value[18]},{value[19]},{value[20]}\n')
 
 
 if __name__ == "__main__":

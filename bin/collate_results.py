@@ -43,8 +43,7 @@ def collate_integration_files(project_info, integration_stats_filenames, project
         # Check if the file exists
         if os.path.exists(file_path):
             df = pd.read_csv(file_path)
-            df['Fidelity Percentage'] = 100*df[f'Complete Beacon Integration']/df[f'Partial Beacon Integration']
-            df['Max Partial Recombination'] = df[['Number of AttL Partial Reads','Number of AttR Partial Reads']].max(axis=1)
+            df['Fidelity Percentage'] = 100*df[f'Complete Beacon Placement']/df[f'Partial Beacon Placement']
             df['Max Complete Recombination'] = df[['Number of AttL Complete Reads','Number of AttR Complete Reads']].max(axis=1)
             df['Max Cargo Recombination'] = df[['Number of AttL Cargo Reads','Number of AttR Cargo Reads']].max(axis=1)
             
@@ -53,7 +52,7 @@ def collate_integration_files(project_info, integration_stats_filenames, project
 
             base_columns_df = df[base_columns]
             # Filter the columns based on requirements
-            integration_cols = [col for col in df.columns if "Integration" in col or "Percentage" in col]
+            integration_cols = [col for col in df.columns if "Integration" in col or "Percentage" in col or "Placement" in col]
             reads_cols = [col for col in df.columns if "Reads" in col or 'reads' in col]
             if collapse_condition == 'Complete':
                 integration_short_cols = [col for col in df.columns if 'Complete P Integration Percentage' in col or 'Complete Reads' in col or 'Complete Beacon Reads' or 'Partial Beacon Reads' in col or 'WT Reads' in col or 'Max Complete Recombination' in col]
@@ -130,11 +129,10 @@ def collate_integration_files(project_info, integration_stats_filenames, project
         partial_beacon_total = temp_df.filter(like='Partial Beacon Reads').sum(axis=1)
         complete_beacon_total = temp_df.filter(like='Complete Beacon Reads').sum(axis=1)
         wt_total = temp_df.filter(like='WT').sum(axis=1)
-        max_attL_attR = np.max(pd.DataFrame({"attL": attL_total, "attR": attR_total}),axis=1)
         total_conversion_percentage = 100*(att_max_total) / (att_max_total + complete_beacon_total)
         total_PGI_percentage = 100*(att_max_total) / (att_max_total + complete_beacon_total + wt_total)
         total_beacon_percentage = 100*(partial_beacon_total + att_max_total) / (att_max_total + partial_beacon_total + wt_total)
-        complete_beacon_percentage = 100*(complete_beacon_total + att_max_total) / (att_max_total + complete_beacon_total + wt_total)
+        complete_beacon_percentage = 100*(complete_beacon_total + att_max_total) / (att_max_total + complete_beacon_total + partial_beacon_total + wt_total)
         beacon_fidelity_percentage = 100*complete_beacon_percentage/total_beacon_percentage
         df_by_condition = pd.DataFrame({f'{key} AttL Total': attL_total, 
                                     f'{key} AttR Total': attR_total, 
@@ -162,21 +160,21 @@ def collate_integration_files(project_info, integration_stats_filenames, project
         merged_short_integration_dfs_combined.to_excel(writer, sheet_name='Condensed Results', index=False)
         dfs_by_condition_concat.to_excel(writer, sheet_name='Results by Condition', index=False)
         
-        # Now, add a thick border using openpyxl
-        for sheet_name, df, interval in zip(["Integration Percent", "Integration Reads", "Condensed Results","Results by Condition"], [merged_integrations_dfs_combined, merged_reads_dfs_combined,merged_short_integration_dfs_combined], [6, 9, 5]):
-            ws = writer.sheets[sheet_name]
+        # # Now, add a thick border using openpyxl
+        # for sheet_name, df, interval in zip(["Integration Percent", "Integration Reads", "Condensed Results","Results by Condition"], [merged_integrations_dfs_combined, merged_reads_dfs_combined,merged_short_integration_dfs_combined], [6, 9, 5]):
+        #     ws = writer.sheets[sheet_name]
             
-            # Define thick border
-            thick_border_left = Border(left=Side(style='thick'))
+        #     # Define thick border
+        #     thick_border_left = Border(left=Side(style='thick'))
             
-            # Determine the columns to apply borders
-            cols_to_border = [8]  # For the "Threat Tier" column
-            cols_to_border += list(range(8 + interval, len(df.columns) + 1, interval))
+        #     # Determine the columns to apply borders
+        #     cols_to_border = [8]  # For the "Threat Tier" column
+        #     cols_to_border += list(range(8 + interval, len(df.columns) + 1, interval))
             
-            for idx in cols_to_border:
-                for row in ws.iter_rows(min_col=idx, max_col=idx, min_row=1, max_row=len(df)+1):
-                    for cell in row:
-                        cell.border = thick_border_left
+        #     for idx in cols_to_border:
+        #         for row in ws.iter_rows(min_col=idx, max_col=idx, min_row=1, max_row=len(df)+1):
+        #             for cell in row:
+        #                 cell.border = thick_border_left
     
     return(output_fn)
 

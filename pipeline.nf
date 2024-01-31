@@ -145,7 +145,6 @@ process GET_TARGET_INFORMATION {
 
 process EXTRACT_TARGET_READS {
     cache 'lenient'
-    maxForks 1
     publishDir "${params.outdir}/probe_specific_reads/${sample_name}/"
     input:
         path target_info
@@ -531,7 +530,7 @@ workflow {
         initial_alignment = ALIGN_READS(reference_absolute_path, reference_index_ch, trimmed_and_merged_fastq.trimmed_fastq, params.initial_mapper)
         fastq_dir = EXTRACT_TARGET_READS(probe_information, initial_alignment.sample_name, initial_alignment.deduped_alignment_bam)
         amplicons_dir = GENERATE_AMPLICONS(probe_information,initial_alignment.sample_name)
-        alignment_dir = ALIGN_TARGET_READS(probe_information, fastq_dir.sample_name.collect(), fastq_dir.extracted_reads_dir.collect(), amplicons_dir)
+        alignment_dir = ALIGN_TARGET_READS(probe_information, fastq_dir.sample_name, fastq_dir.extracted_reads_dir, amplicons_dir)
         att_sequence_dirs = MEASURE_INTEGRATION(probe_information,alignment_dir.sample_name, alignment_dir.probe_read_alignments)
         qc_summary = GATHER_QC_INFO(trimmed_and_merged_fastq.fastp_stats, fastq_dir.extracted_reads_dir)
         cs2_attL_attR_dirs = RUN_CS2_FOR_INDELS(att_sequence_dirs.sample_name, att_sequence_dirs.attL_extracted_reads_dir, att_sequence_dirs.attR_extracted_reads_dir, att_sequence_dirs.beacon_extracted_reads_dir, amplicons_dir, probe_information)
