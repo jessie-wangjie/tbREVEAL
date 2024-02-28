@@ -27,8 +27,10 @@ def get_target_info(metadata_fn, attp_reg_seq, attp_prime_seq,reference_path,car
     beacons = []
     attLs = []
     attRs = []
+    beacon_quant_windows = []
     attL_quant_windows = []
     attR_quant_windows = []
+    wt_quant_windows = []
     threat_tiers = []
     overlapping_features = []
     gene_names = []
@@ -40,7 +42,69 @@ def get_target_info(metadata_fn, attp_reg_seq, attp_prime_seq,reference_path,car
 
     for index, row in df.iterrows():
         id = row['Target']
-        if 'AA' in id:
+        # OT are CAS9 mediated off-targets
+        if 'OT' in id:
+            target = df[df.Target == id]['Target'].iloc[0]
+            chr = df[df.Target == id]['Chromosome'].iloc[0]
+            start = df[df.Target == id]['Start'].iloc[0]
+            end = df[df.Target == id]['Stop'].iloc[0]
+            strand = df[df.Target == id]['Strand'].iloc[0]
+
+            if '_' in chr:
+                continue
+
+            if 'chr' not in chr:
+                chr = 'chr' + chr  
+
+            query = '''
+            SELECT 
+                chr, start, spacer_off_target.end, strand, overlap_gene, overlap_gene_biotype, threat_tier
+            FROM 
+                spacer_off_target AS spacer_off_target
+            WHERE
+                file_registry_id$ = %s
+            '''
+            cur.execute(query, [id])
+            result = cur.fetchone()
+
+            len_genomic_seq_to_include = 30
+
+            if result:
+                chr, start, end, strand, overlap_gene, overlap_gene_biotype, threat_tier = result
+            
+            if strand == '-':
+                cut_pos = len_genomic_seq_to_include + 4
+            elif strand == '+':
+                cut_pos = len_genomic_seq_to_include + (int(end)-int(start)) - 1
+
+            flank_size = 3
+            ot_quant_lower_bound = cut_pos - flank_size
+            ot_quant_upper_bound = cut_pos + flank_size + 1
+
+            amplicon_sequence_command = f'samtools faidx {reference_path} {chr}:{int(start)-len_genomic_seq_to_include}-{int(end)+len_genomic_seq_to_include}'
+            amplicon_sequence = ''.join(subprocess.check_output(amplicon_sequence_command, shell=True).decode(sys.stdout.encoding).split('\n')[1:]).upper()
+            ot_quant_window_string = id + ':dinuc:' + str(ot_quant_lower_bound) + '-' + str(ot_quant_upper_bound) + ':0'
+            
+            ids.append(id)
+            chrs.append(chr)
+            starts.append(start)
+            ends.append(end)
+            wts.append(amplicon_sequence)
+            beacons.append('')
+            attLs.append('')
+            attRs.append('')
+            wt_quant_windows.append(ot_quant_window_string)
+            beacon_quant_windows.append(ot_quant_window_string)
+            attL_quant_windows.append(ot_quant_window_string)
+            attR_quant_windows.append(ot_quant_window_string)
+            threat_tiers.append(threat_tier)
+            overlapping_features.append(overlap_gene_biotype)
+            gene_names.append(overlap_gene)
+            gene_strands.append(strand)
+            gene_distances.append('0')
+            same_strands.append('True')
+
+        elif 'AA' in id:
             target = df[df.Target == id]['Target'].iloc[0]
             chr = df[df.Target == id]['Chromosome'].iloc[0]
             start = df[df.Target == id]['Start'].iloc[0]
@@ -95,8 +159,8 @@ def get_target_info(metadata_fn, attp_reg_seq, attp_prime_seq,reference_path,car
             wt_command = f'samtools faidx {reference_path} {chr}:{int(spacer_jmin_cutsite)}-{int(spacer_jmin_cutsite)}'
 
             wt_sequence = ''.join(subprocess.check_output(wt_command, shell=True).decode(sys.stdout.encoding).split('\n')[1:]).upper()
-            attL = (b_reg_sequence + attp_prime_seq).upper()
-            attR = (attp_reg_seq + b_prime_sequence).upper()
+            attL = (beacon_beginning_sequence + b_reg_sequence + attp_prime_seq).upper()
+            attR = (attp_reg_seq + b_prime_sequence + beacon_end_sequence).upper()
 
             # store cargo sequence so we can search for subsequence locations
             with open(cargo_reference_path, 'r') as f:
@@ -113,11 +177,17 @@ def get_target_info(metadata_fn, attp_reg_seq, attp_prime_seq,reference_path,car
 
             length_of_dinucleotide = 2
 
-            position_of_attL_dinucleotide_lower = len(b_reg_sequence) - length_of_dinucleotide + 1
-            position_of_attL_dinucleotide_upper = len(b_reg_sequence)
+            position_of_beacon_dinucleotide_lower = len_genomic_seq_to_include + len(b_reg_sequence) - length_of_dinucleotide + 1
+            position_of_beacon_dinucleotide_upper = len_genomic_seq_to_include + len(b_reg_sequence)
+
+            position_of_attL_dinucleotide_lower = len_genomic_seq_to_include + len(b_reg_sequence) - length_of_dinucleotide + 1
+            position_of_attL_dinucleotide_upper = len_genomic_seq_to_include + len(b_reg_sequence)
 
             position_of_attR_dinucleotide_lower = len_cargo_to_include + len(attp_reg_seq) - length_of_dinucleotide + 1
             position_of_attR_dinucleotide_upper = len_cargo_to_include + len(attp_reg_seq)
+
+            beacon_quant_lower_bound = position_of_beacon_dinucleotide_lower - 3
+            beacon_quant_upper_bound = position_of_beacon_dinucleotide_upper + 3
 
             attL_quant_lower_bound = position_of_attL_dinucleotide_lower - 3
             attL_quant_upper_bound = position_of_attL_dinucleotide_upper + 3
@@ -125,6 +195,7 @@ def get_target_info(metadata_fn, attp_reg_seq, attp_prime_seq,reference_path,car
             attR_quant_lower_bound = position_of_attR_dinucleotide_lower - 3
             attR_quant_upper_bound = position_of_attR_dinucleotide_upper + 3
 
+            beacon_quant_window_string = id + ':dinuc:' + str(beacon_quant_lower_bound) + '-' + str(beacon_quant_upper_bound) + ':0'
             attL_quant_window_string = id + ':dinuc:' + str(attL_quant_lower_bound) + '-' + str(attL_quant_upper_bound) + ':0'
             attR_quant_window_string = id + ':dinuc:' + str(attR_quant_lower_bound) + '-' + str(attR_quant_upper_bound) + ':0'
 
@@ -139,8 +210,10 @@ def get_target_info(metadata_fn, attp_reg_seq, attp_prime_seq,reference_path,car
             beacons.append(beacon_sequence)
             attLs.append(attL)
             attRs.append(attR)
+            beacon_quant_windows.append(beacon_quant_window_string)
             attL_quant_windows.append(attL_quant_window_string)
             attR_quant_windows.append(attR_quant_window_string)
+            wt_quant_windows.append('')
             threat_tiers.append(threat_tier)
             overlapping_features.append(overlapping_feature)
             gene_names.append(closest_gene)
@@ -223,11 +296,17 @@ def get_target_info(metadata_fn, attp_reg_seq, attp_prime_seq,reference_path,car
 
             length_of_dinucleotide = len(central_nucleotides_seq)
 
+            position_of_beacon_dinucleotide_lower = len_genomic_seq_to_include + (central_dinucleotide_start - start) + 1 
+            position_of_beacon_dinucleotide_upper = len_genomic_seq_to_include + (central_dinucleotide_start - start) + length_of_dinucleotide
+
             position_of_attL_dinucleotide_lower = len_genomic_seq_to_include + (central_dinucleotide_start - start) + 1 
             position_of_attL_dinucleotide_upper = len_genomic_seq_to_include + (central_dinucleotide_start - start) + length_of_dinucleotide
 
             position_of_attR_dinucleotide_lower = len_cargo_to_include + len(attp_reg_seq) - length_of_dinucleotide + 1
             position_of_attR_dinucleotide_upper = len_cargo_to_include + len(attp_reg_seq)
+
+            beacon_quant_lower_bound = position_of_beacon_dinucleotide_lower - 3
+            beacon_quant_upper_bound = position_of_beacon_dinucleotide_upper + 3
 
             attL_quant_lower_bound = position_of_attL_dinucleotide_lower - 3
             attL_quant_upper_bound = position_of_attL_dinucleotide_upper + 3
@@ -235,6 +314,7 @@ def get_target_info(metadata_fn, attp_reg_seq, attp_prime_seq,reference_path,car
             attR_quant_lower_bound = position_of_attR_dinucleotide_lower - 3
             attR_quant_upper_bound = position_of_attR_dinucleotide_upper + 3
 
+            beacon_quant_window_string = id + ':dinuc:' + str(beacon_quant_lower_bound) + '-' + str(beacon_quant_upper_bound) + ':0'
             attL_quant_window_string = id + ':dinuc:' + str(attL_quant_lower_bound) + '-' + str(attL_quant_upper_bound) + ':0'
             attR_quant_window_string = id + ':dinuc:' + str(attR_quant_lower_bound) + '-' + str(attR_quant_upper_bound) + ':0'
 
@@ -247,7 +327,6 @@ def get_target_info(metadata_fn, attp_reg_seq, attp_prime_seq,reference_path,car
             gene_strand = [el.split(",")[1].strip() for el in gene_list]
             gene_distance = [el.split(",")[2].strip() for el in gene_list]
 
-
             if strand in gene_strand:
                 same_strand="True"
             else:
@@ -256,10 +335,7 @@ def get_target_info(metadata_fn, attp_reg_seq, attp_prime_seq,reference_path,car
             gene_name = "/".join(gene_name)
             gene_strand = "/".join(gene_strand)
             gene_distance = "/".join(gene_distance)
-
-            print(gene_list)
-            print(gene_name, gene_strand,gene_distance)
-
+            
             ids.append(id)
             chrs.append(chr)
             starts.append(start)
@@ -268,8 +344,10 @@ def get_target_info(metadata_fn, attp_reg_seq, attp_prime_seq,reference_path,car
             beacons.append(cryptic_beacon)
             attLs.append(cryptic_AttL_sequence)
             attRs.append(cryptic_AttR_sequence)
+            beacon_quant_windows.append(beacon_quant_window_string)
             attL_quant_windows.append(attL_quant_window_string)
             attR_quant_windows.append(attR_quant_window_string)
+            wt_quant_windows.append('')
             threat_tiers.append(threat_tier)
             overlapping_features.append(overlapping_feature)
             gene_names.append(gene_name)
@@ -287,8 +365,10 @@ def get_target_info(metadata_fn, attp_reg_seq, attp_prime_seq,reference_path,car
         'beacon': beacons,
         'attL': attLs,
         'attR': attRs,
+        'beacon_quant_window': beacon_quant_windows,
         'attL_quant_window': attL_quant_windows,
         'attR_quant_window': attR_quant_windows,
+        'wt_quant_window': wt_quant_windows,
         'threat_tier': threat_tiers,
         'same_strand': same_strands,
         'overlapping_feature': overlapping_features,

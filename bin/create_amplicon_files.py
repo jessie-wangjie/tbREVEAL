@@ -38,6 +38,10 @@ def create_amplicon_files(target_info):
                 SeqRecord(Seq(beacon_amplicon), id="beacon_amplicon", description=""),
                 SeqRecord(Seq(wt_amplicon), id="wt_amplicon", description="")
             ]
+        elif 'OT' in row['id']:
+            records = [
+                SeqRecord(Seq(wt_amplicon), id="wt_amplicon", description="")
+            ]
 
         SeqIO.write(records, output_fasta_fn, "fasta")
 

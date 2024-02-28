@@ -6,17 +6,30 @@ import argparse
 import os
 import multiprocessing
 
+import os
+import subprocess
+
+import os
+import subprocess
+
 def align_row(args):
     """
     Worker function to align each row.
     """
     fastq_dir, amplicon_dir, alignments_dir, row = args
-    fastq_file = os.path.join(fastq_dir, row['id'] + '.fastq')
-    fasta_file = os.path.join(amplicon_dir, row['id'] + '_amplicon.fasta')
-    output_file = os.path.join(alignments_dir, row['id'] + '_alignment.sam')
+    base_name = os.path.join(alignments_dir, row['id'])
+    fastq_file = f"{fastq_dir}/{row['id']}.fastq"
+    fasta_file = f"{amplicon_dir}/{row['id']}_amplicon.fasta"
+    output_file = f"{base_name}_alignment.sam"
+    output_bam = f"{base_name}_alignment.bam"  # This will now directly receive the sorted BAM output
 
     subprocess.run(["bwa", "index", fasta_file])
     subprocess.run(["bwa", "mem", "-t", "28", "-r", "1", "-k", "11", "-A", "8", "-E", "1", fasta_file, fastq_file, "-o", output_file])
+    
+    # Pipe samtools view output to samtools sort and output directly to the final BAM file
+    subprocess.run(f"samtools view -b {output_file} | samtools sort -o {output_bam}", shell=True)
+
+    subprocess.run(f"samtools index {output_bam}", shell=True)
 
 def align(target_info, fastq_dir, amplicon_dir, sample_name):
     target_info_df = pd.read_csv(target_info)

@@ -16,13 +16,15 @@ def get_amplicon_sequence(amplicon_path, chr_name):
     amplicon_sequence = ''.join(subprocess.check_output(amplicon_sequence_command, shell=True).decode(sys.stdout.encoding).split('\n')[1:]).upper()
     return amplicon_sequence
 
-def run_cs2_for_type(amplicon_dir, target_info_df, junction_type, sample_name):
+def run_cs2_for_type(amplicon_dir, bam_dir, target_info_df, junction_type, sample_name):
 
     reads_dir = f'{sample_name}_{junction_type}_extracted_reads'
     
     for _, row in target_info_df.iterrows():
         id = row['id']
         quant_window = row.get(f'{junction_type}_quant_window', None)
+        if quant_window == '':
+            continue
         quant_window_range = None
         if quant_window:
             quant_window_range = quant_window.split(':')[2]
@@ -34,52 +36,55 @@ def run_cs2_for_type(amplicon_dir, target_info_df, junction_type, sample_name):
         
         if os.path.exists(fastq_fn):
             amplicon_path = f"{amplicon_dir}/{id}_amplicon.fasta"
+            bam_path = f"{bam_dir}/{id}_alignment.bam"
             amplicon_sequence = get_amplicon_sequence(amplicon_path, f"{junction_type}_amplicon")
             
-            crispresso_command = [
-                "CRISPResso", "--fastq_r1", fastq_fn, 
-                "--amplicon_seq", amplicon_sequence, 
-                "--amplicon_name", id, 
-                "--name", f"{id}_{junction_type}", 
-                "--write_detailed_allele_table", 
-                "--bam_output", 
-                "--exclude_bp_from_left", "0", 
-                "--exclude_bp_from_right", "0", 
-                "--amplicon_min_alignment_score", "5"
-            ]
-            if quant_window_range:
-                crispresso_command.extend(["--quantification_window_coordinates", quant_window_range])
+            # crispresso_command = [
+            #     "CRISPResso", "--fastq_r1", fastq_fn, 
+            #     "--amplicon_seq", amplicon_sequence, 
+            #     "--amplicon_name", id, 
+            #     "--name", f"{id}_{junction_type}", 
+            #     "--write_detailed_allele_table", 
+            #     "--bam_output", 
+            #     "--exclude_bp_from_left", "0", 
+            #     "--exclude_bp_from_right", "0", 
+            #     "--amplicon_min_alignment_score", "5"
+            # ]
+            # if quant_window_range:
+            #     crispresso_command.extend(["--quantification_window_coordinates", quant_window_range])
             
-            subprocess.run(crispresso_command)
+            #subprocess.run(crispresso_command)
             
-            os.makedirs(f"CRISPResso_on_{id}_{junction_type}/cs2_alignment_html", exist_ok=True)
+            #os.makedirs(f"CRISPResso_on_{id}_{junction_type}/cs2_alignment_html", exist_ok=True)
             
-            allele2html_command = f"/data/tbHCA/bin/utils/allele2html.py -f CRISPResso_on_{id}_{junction_type}/ -r {id}"
+            # allele2html_command = f"/data/tbHCA/bin/utils/allele2html.py -f CRISPResso_on_{id}_{junction_type}/ -r {id}"
+            allele2html_command = f"/data/tbHCA/bin/utils/bam2html.py -s {bam_path} -f {amplicon_path} -r {junction_type}_amplicon -o {id}_{junction_type}_alignment.html"
             if quant_window:
-                allele2html_command += f" -b {quant_window}"
+                allele2html_command += f" -b {quant_window_range}"
             subprocess.call(allele2html_command, shell=True)
 
-    pattern = f"CRISPResso_on_*_{junction_type}/CRISPResso_quantification_of_editing_frequency.txt"
-    destination_folder = f"{sample_name}_cs2_{junction_type}"
+    # pattern = f"CRISPResso_on_*_{junction_type}/CRISPResso_quantification_of_editing_frequency.txt"
+    # destination_folder = f"{sample_name}_cs2_{junction_type}"
 
-    matching_files = glob.glob(pattern)
-    for file_path in matching_files:
-        file_name = os.path.basename(file_path)
-        destination_path = os.path.join(destination_folder, file_name)
-        shutil.move(file_path, destination_path)
+    # matching_files = glob.glob(pattern)
+    # for file_path in matching_files:
+    #     file_name = os.path.basename(file_path)
+    #     destination_path = os.path.join(destination_folder, file_name)
+    #     shutil.move(file_path, destination_path)
     
-    pattern = f"CRISPResso_on_*_{junction_type}/cs2_alignment_html/*.html"
-    destination_folder = f"{sample_name}_{junction_type}_alignments"
+    # pattern = f"CRISPResso_on_*_{junction_type}/cs2_alignment_html/*.html"
+    # destination_folder = f"{sample_name}_{junction_type}_alignments"
 
-    matching_files = glob.glob(pattern)
-    for file_path in matching_files:
-        file_name = os.path.basename(file_path)
-        destination_path = os.path.join(destination_folder, file_name)
-        shutil.move(file_path, destination_path)
+    # matching_files = glob.glob(pattern)
+    # for file_path in matching_files:
+    #     file_name = os.path.basename(file_path)
+    #     destination_path = os.path.join(destination_folder, file_name)
+    #     shutil.move(file_path, destination_path)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Process reads and amplicons.')
     parser.add_argument('--amplicon_dir', type=str, help='Path to the directory containing amplicons.')
+    parser.add_argument('--bam_dir', type=str, help='Path to the directory containing alignments in BAM format.')
     parser.add_argument('--target_info', type=str, help='Path to the target information file.')
     parser.add_argument('--sample_name', type=str, help='Sample name')
 
@@ -88,11 +93,13 @@ if __name__ == "__main__":
     os.makedirs(f'{args.sample_name}_cs2_attL', exist_ok=True)
     os.makedirs(f'{args.sample_name}_cs2_attR', exist_ok=True)
     os.makedirs(f'{args.sample_name}_cs2_beacon', exist_ok=True)
+    os.makedirs(f'{args.sample_name}_cs2_wt', exist_ok=True)
 
     os.makedirs(f'{args.sample_name}_attL_alignments', exist_ok=True)
     os.makedirs(f'{args.sample_name}_attR_alignments', exist_ok=True)
     os.makedirs(f'{args.sample_name}_beacon_alignments', exist_ok=True)
+    os.makedirs(f'{args.sample_name}_wt_alignments', exist_ok=True)
 
     target_info_df = read_target_info(args.target_info)
-    for junction_type in ['attL', 'attR', 'beacon']:
-        run_cs2_for_type(args.amplicon_dir, target_info_df, junction_type, args.sample_name)
+    for junction_type in ['attL', 'attR', 'beacon', 'wt']:
+        run_cs2_for_type(args.amplicon_dir, args.bam_dir, target_info_df, junction_type, args.sample_name)

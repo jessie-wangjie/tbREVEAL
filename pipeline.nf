@@ -98,8 +98,8 @@ process ALIGN_READS {
 
     output:
         val(sample_name), emit: sample_name
-        tuple val(group), path("${sample_name}_initial_alignment.bam"), path("${sample_name}_initial_alignment.bam.bai")
-        tuple val(group), path("${sample_name}_deduped_alignment.bam"), path("${sample_name}_deduped_alignment.bam.bai"), emit: deduped_alignment_bam
+        tuple val(sample_name), val(group), path("${sample_name}_initial_alignment.bam"), path("${sample_name}_initial_alignment.bam.bai"), emit: original_alignment_bam
+        tuple val(sample_name), val(group), path("${sample_name}_deduped_alignment.bam"), path("${sample_name}_deduped_alignment.bam.bai"), emit: deduped_alignment_bam
         path "${reference}.fai", emit: reference_fasta_fai
 
     script:
@@ -149,7 +149,7 @@ process EXTRACT_TARGET_READS {
     input:
         path target_info
         val(sample_name)
-        tuple val(group), path(bam_file), path(bam_file_index)
+        tuple val(sample_name), val(group), path(bam_file), path(bam_file_index)
     output:
         val sample_name, emit: sample_name
         path("${sample_name}_extracted_reads"), emit: extracted_reads_dir
@@ -207,6 +207,7 @@ process MEASURE_INTEGRATION {
         path("${sample_name}_attL_extracted_reads"), emit: attL_extracted_reads_dir
         path("${sample_name}_attR_extracted_reads"), emit: attR_extracted_reads_dir
         path("${sample_name}_beacon_extracted_reads"), emit: beacon_extracted_reads_dir
+        path("${sample_name}_wt_extracted_reads"), emit: wt_extracted_reads_dir
     
     script:
     """
@@ -219,27 +220,33 @@ process GATHER_QC_INFO {
     publishDir "${params.outdir}/qc_info/${sample_name}/"
     input:
         tuple val(sample_name), path(json_file)
+        tuple val(sample_name), val(group), path(original_bam_file), path(original_bam_file_index)
+        tuple val(sample_name), val(group), path(deduped_bam_file), path(deduped_bam_file_index)
         path fastq_dir 
     output:
         val(sample_name), emit: sample_name
         path "${sample_name}_qc_summary.csv", emit: qc_summary_file
     script:
     """
-    gather_qc_stats.py --json_file ${json_file} --fastq_dir ${fastq_dir} --sample_name ${sample_name}
+    gather_qc_stats.py --json_file ${json_file} --fastq_dir ${fastq_dir} --sample_name ${sample_name} --original_bam_file ${original_bam_file} --deduped_bam_file ${deduped_bam_file}
     """
 }
 
 process RUN_CS2_FOR_INDELS {
     cache 'lenient'
     maxForks 1
-    // publishDir "${params.outdir}/${sample_name}/cs2_output",pattern:"*cs2_*"
-    publishDir "${params.outdir}/alignment_visualizations/", pattern:"*alignments*"
-
+    publishDir "${params.outdir}/alignment_visualizations/${sample_name}/attL_alignments/", pattern:'*attL*.html'
+    publishDir "${params.outdir}/alignment_visualizations/${sample_name}/attR_alignments/", pattern:'*attR*.html'
+    publishDir "${params.outdir}/alignment_visualizations/${sample_name}/beacon_alignments/", pattern:'*beacon*.html'
+    publishDir "${params.outdir}/alignment_visualizations/${sample_name}/wt_alignments/", pattern:'*wt*.html'
+    
     input:
         val(sample_name)
+        path bam_dir
         path attL_extracted_reads_dir 
         path attR_extracted_reads_dir 
         path beacon_extracted_reads_dir 
+        path wt_extracted_reads_dir
         path amplicon_dir
         path target_info
     output:
@@ -247,14 +254,18 @@ process RUN_CS2_FOR_INDELS {
         path("${sample_name}_cs2_attL"), emit: cs2_attL_dir
         path("${sample_name}_cs2_attR"), emit: cs2_attR_dir
         path("${sample_name}_cs2_beacon"), emit: cs2_beacon_dir
+        path("${sample_name}_cs2_wt"), emit: cs2_wt_dir
 
         path("${sample_name}_attL_alignments"), optional: true, emit: cs2_attL_alignments
         path("${sample_name}_attR_alignments"), optional: true, emit: cs2_attR_alignments
         path("${sample_name}_beacon_alignments"), optional: true, emit: cs2_beacon_alignments
+        path("${sample_name}_wt_alignments"), optional: true, emit: cs2_wt_alignments
+
+        path("*.html"), optional: true
    
     script:
     """
-    run_cs2.py --amplicon_dir ${amplicon_dir} --target_info ${target_info} --sample_name ${sample_name}
+    run_cs2.py --amplicon_dir ${amplicon_dir} --bam_dir ${bam_dir} --target_info ${target_info} --sample_name ${sample_name}
     """
 }
 
@@ -271,11 +282,13 @@ process GET_INDEL_INFO_FROM_CS2_OUTPUT {
         val(sample_name), emit: sample_name
         path("${sample_name}_attL_indel_table.csv"), emit: attL_indel_table
         path("${sample_name}_attR_indel_table.csv"), emit: attR_indel_table
+        path("${sample_name}_beacon_indel_table.csv"), emit: beacon_indel_table
    
     script:
     """
     get_indel_info.py --cs2_directory ${cs2_attL} --output_fn ${sample_name}_attL_indel_table.csv
     get_indel_info.py --cs2_directory ${cs2_attR} --output_fn ${sample_name}_attR_indel_table.csv
+    get_indel_info.py --cs2_directory ${cs2_beacon} --output_fn ${sample_name}_beacon_indel_table.csv
     """
 }
 
@@ -444,7 +457,7 @@ workflow {
          """
          .stripIndent()
 
-    Channel.fromPath("${params.reference_index_location}/*.{fa,fasta,mmi}.*")
+    Channel.fromPath("${params.reference_index_location}/*.{fa,fasta,fna,mmi}.*")
     .collect()
     .set { reference_index_ch }
 
@@ -473,6 +486,8 @@ workflow {
         )
     }
     .set { bam_input_ch }
+
+    bam_input_ch.view()
     } else {
         // Existing logic to handle FASTQ file input
         Channel.fromPath(params.samplesheet)
@@ -491,6 +506,8 @@ workflow {
         .set { input_ch }
     }
 
+    
+
     if (params.useBam){
         sample_name = bam_input_ch.map {
            it[0]
@@ -506,15 +523,15 @@ workflow {
         }
 
         bam_tuple_ch = bam_input_ch.map { items ->
-            return tuple(items[4], items[1], items[2])
+            return tuple(items[0], items[4], items[1], items[2])
         }
- 
+
         probe_information = GET_TARGET_INFORMATION(bam_input_ch, reference_absolute_path, cargo_absolute_path, params.ATTP_REG, params.ATTP_PRIME)
         fastq_dir = EXTRACT_TARGET_READS(probe_information, sample_name, bam_tuple_ch)
         amplicons_dir = GENERATE_AMPLICONS(probe_information, sample_name)
         alignment_dir = ALIGN_TARGET_READS(probe_information, fastq_dir.sample_name, fastq_dir.extracted_reads_dir, amplicons_dir)
         att_sequence_dirs = MEASURE_INTEGRATION(probe_information,alignment_dir.sample_name, alignment_dir.probe_read_alignments)
-        cs2_attL_attR_dirs = RUN_CS2_FOR_INDELS(att_sequence_dirs.sample_name, att_sequence_dirs.attL_extracted_reads_dir, att_sequence_dirs.attR_extracted_reads_dir, att_sequence_dirs.beacon_extracted_reads_dir, amplicons_dir, probe_information)
+        cs2_attL_attR_dirs = RUN_CS2_FOR_INDELS(att_sequence_dirs.sample_name, alignment_dir.probe_read_alignments, att_sequence_dirs.attL_extracted_reads_dir, att_sequence_dirs.attR_extracted_reads_dir, att_sequence_dirs.beacon_extracted_reads_dir, att_sequence_dirs.wt_extracted_reads_dir, amplicons_dir, probe_information)
         indel_tables = GET_INDEL_INFO_FROM_CS2_OUTPUT(cs2_attL_attR_dirs.sample_name, cs2_attL_attR_dirs.cs2_attL_dir, cs2_attL_attR_dirs.cs2_attR_dir, cs2_attL_attR_dirs.cs2_beacon_dir)
         COMBINE_INTEGRATION_AND_INDEL_INFO(att_sequence_dirs.sample_name, att_sequence_dirs.integration_stats_file, indel_tables.attL_indel_table, indel_tables.attR_indel_table)
         
@@ -526,14 +543,13 @@ workflow {
         // run these two when fastq input
         probe_information = GET_TARGET_INFORMATION(input_ch, reference_absolute_path, cargo_absolute_path, params.ATTP_REG, params.ATTP_PRIME)
         trimmed_and_merged_fastq = ADAPTER_AND_POLY_G_TRIM(input_ch, params.umi_in_header, params.umi_loc, params.umi_length,params.other_fastp_params)
-        // prevent oom errors on large datasets when align + clean reads are running at the same time
         initial_alignment = ALIGN_READS(reference_absolute_path, reference_index_ch, trimmed_and_merged_fastq.trimmed_fastq, params.initial_mapper)
         fastq_dir = EXTRACT_TARGET_READS(probe_information, initial_alignment.sample_name, initial_alignment.deduped_alignment_bam)
         amplicons_dir = GENERATE_AMPLICONS(probe_information,initial_alignment.sample_name)
         alignment_dir = ALIGN_TARGET_READS(probe_information, fastq_dir.sample_name, fastq_dir.extracted_reads_dir, amplicons_dir)
         att_sequence_dirs = MEASURE_INTEGRATION(probe_information,alignment_dir.sample_name, alignment_dir.probe_read_alignments)
-        qc_summary = GATHER_QC_INFO(trimmed_and_merged_fastq.fastp_stats, fastq_dir.extracted_reads_dir)
-        cs2_attL_attR_dirs = RUN_CS2_FOR_INDELS(att_sequence_dirs.sample_name, att_sequence_dirs.attL_extracted_reads_dir, att_sequence_dirs.attR_extracted_reads_dir, att_sequence_dirs.beacon_extracted_reads_dir, amplicons_dir, probe_information)
+        qc_summary = GATHER_QC_INFO(trimmed_and_merged_fastq.fastp_stats, initial_alignment.original_alignment_bam, initial_alignment.deduped_alignment_bam, fastq_dir.extracted_reads_dir)
+        cs2_attL_attR_dirs = RUN_CS2_FOR_INDELS(att_sequence_dirs.sample_name, alignment_dir.probe_read_alignments, att_sequence_dirs.attL_extracted_reads_dir, att_sequence_dirs.attR_extracted_reads_dir, att_sequence_dirs.beacon_extracted_reads_dir, att_sequence_dirs.wt_extracted_reads_dir, amplicons_dir, probe_information)
         indel_tables = GET_INDEL_INFO_FROM_CS2_OUTPUT(cs2_attL_attR_dirs.sample_name, cs2_attL_attR_dirs.cs2_attL_dir, cs2_attL_attR_dirs.cs2_attR_dir, cs2_attL_attR_dirs.cs2_beacon_dir)
         COMBINE_INTEGRATION_AND_INDEL_INFO(att_sequence_dirs.sample_name, att_sequence_dirs.integration_stats_file, indel_tables.attL_indel_table, indel_tables.attR_indel_table)
         def samplesheet_absolute_path = "${launchDir}/${params.samplesheet}"

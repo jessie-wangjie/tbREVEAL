@@ -43,6 +43,7 @@ def collate_integration_files(project_info, integration_stats_filenames, project
         # Check if the file exists
         if os.path.exists(file_path):
             df = pd.read_csv(file_path)
+            print(df[df['Number of WT Reads'] > 0])
             df['Fidelity Percentage'] = 100*df[f'Complete Beacon Placement']/df[f'Partial Beacon Placement']
             df['Max Complete Recombination'] = df[['Number of AttL Complete Reads','Number of AttR Complete Reads']].max(axis=1)
             df['Max Cargo Recombination'] = df[['Number of AttL Cargo Reads','Number of AttR Cargo Reads']].max(axis=1)
@@ -52,7 +53,7 @@ def collate_integration_files(project_info, integration_stats_filenames, project
 
             base_columns_df = df[base_columns]
             # Filter the columns based on requirements
-            integration_cols = [col for col in df.columns if "Integration" in col or "Percentage" in col or "Placement" in col]
+            integration_cols = [col for col in df.columns if "Integration" in col or "Percentage" in col or "Placement" in col or 'Indels' in col]
             reads_cols = [col for col in df.columns if "Reads" in col or 'reads' in col]
             if collapse_condition == 'Complete':
                 integration_short_cols = [col for col in df.columns if 'Complete P Integration Percentage' in col or 'Complete Reads' in col or 'Complete Beacon Reads' or 'Partial Beacon Reads' in col or 'WT Reads' in col or 'Max Complete Recombination' in col]
@@ -123,6 +124,7 @@ def collate_integration_files(project_info, integration_stats_filenames, project
         temp_df = pd.concat([base_columns_df,temp_df],axis=1)
         attL_total = temp_df.filter(like=f'AttL {collapse_condition}').sum(axis=1)
         attR_total = temp_df.filter(like=f'AttR {collapse_condition}').sum(axis=1)
+        indel_total = temp_df.filter(like='Number of Indel Reads').sum(axis=1)
 
         att_max_total = temp_df.filter(like=f'Max {collapse_condition} Recombination').sum(axis=1)
 
@@ -134,8 +136,10 @@ def collate_integration_files(project_info, integration_stats_filenames, project
         total_beacon_percentage = 100*(partial_beacon_total + att_max_total) / (att_max_total + partial_beacon_total + wt_total)
         complete_beacon_percentage = 100*(complete_beacon_total + att_max_total) / (att_max_total + complete_beacon_total + partial_beacon_total + wt_total)
         beacon_fidelity_percentage = 100*complete_beacon_percentage/total_beacon_percentage
+        indel_percentage = 100 * (indel_total / (attL_total + attR_total + wt_total + complete_beacon_total + partial_beacon_total))
         df_by_condition = pd.DataFrame({f'{key} AttL Total': attL_total, 
                                     f'{key} AttR Total': attR_total, 
+                                    f'{key} Indel Total': indel_total,
                                     f'{key} Recombined Total': att_max_total,
                                     f'{key} Partial Beacon Total': partial_beacon_total,
                                     f'{key} Complete Beacon Total': complete_beacon_total,
@@ -144,7 +148,8 @@ def collate_integration_files(project_info, integration_stats_filenames, project
                                     f'{key} Complete Beacon %': complete_beacon_percentage,
                                     f'{key} Beacon Fidelity %': beacon_fidelity_percentage,
                                     f'{key} PGI %': total_PGI_percentage,
-                                    f'{key} Conversion %':total_conversion_percentage})
+                                    f'{key} Conversion %':total_conversion_percentage,
+                                    f'{key} Indel %':indel_percentage})
         df_by_condition.reset_index(drop=True,inplace=True)
         dfs_by_condition.append(df_by_condition)
 
@@ -224,7 +229,7 @@ def collate_indel_files(project_info, attL_indel_table_filenames, attR_indel_tab
     # Merge all dataframes horizontally on 'Amplicon'
     combined_df = all_dfs.pop(0)
     for df in all_dfs:
-        combined_df = pd.merge(combined_df, df, on='Amplicon', how='outer')
+        combined_df = pd.merge(combined_df, df, on='Amplicon')
 
     # Split columns based on presence of "%"
     percentage_cols = [col for col in combined_df.columns if "%" in col]
@@ -267,7 +272,7 @@ def collate_reads_per_site_files(project_info,read_counts_per_site_filenames, ex
         if collated_indel_df.empty:
             collated_indel_df = df
         else:
-            collated_indel_df = pd.merge(collated_indel_df, df, on=unchanged_column)
+            collated_indel_df = pd.merge(collated_indel_df, df, how='outer',on=unchanged_column)
 
     # Append the collated dataframe as a new sheet to the existing Excel file
     with pd.ExcelWriter(excel_filename, engine='openpyxl', mode='a') as writer:
@@ -305,8 +310,8 @@ def collate_qc_files(project_info,qc_filenames, extracted_reads_dirs, excel_file
         collated_indel_df.loc["reads near probe", sample_name] = reads_near_probe
 
         # Add "reads near probe %" row
-        after_filter_reads = float(collated_indel_df.loc["after filter reads", sample_name])
-        collated_indel_df.loc["reads near probe %", sample_name] = round(reads_near_probe / after_filter_reads * 100,2)  # as a percentage
+        deduped_reads = float(collated_indel_df.loc["deduped_reads", sample_name])
+        collated_indel_df.loc["reads near probe %", sample_name] = round(reads_near_probe / deduped_reads * 100,2)  # as a percentage
 
     # Append the collated dataframe as a new sheet to the existing Excel file
     with pd.ExcelWriter(excel_filename, engine='openpyxl', mode='a') as writer:
@@ -317,10 +322,6 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Combine results from all samples")
     # parser.add_argument("--results_dir", help="Parent directory containing the subfolders")
     parser.add_argument("--project_name", help="Name of the project -- only affects output filenames")
-    # parser.add_argument("--control_string", help="String of sample name which indicates control sample")
-    # parser.add_argument("--treated_string", help="String of sample name which indicates treated sample")
-    
-
     parser.add_argument("--project_config_file", required=True, help="Project config file")
     parser.add_argument("--integration_stats_files",nargs='+', required=True, help="Integration stats files")
     parser.add_argument("--attL_indel_table_files",nargs='+', required=True, help="attL indel table files")
@@ -334,8 +335,6 @@ if __name__ == "__main__":
 
     results_output_fn = f"{args.project_name}_results.xlsx"
     
-
     integration_fn = collate_integration_files(args.project_config_file, args.integration_stats_files, args.project_name, args.collapse_condition_by)
-    collate_indel_files(args.project_config_file, args.attL_indel_table_files, args.attR_indel_table_files, integration_fn)
     collate_reads_per_site_files(args.project_config_file,args.read_counts_per_site_files, integration_fn)
     collate_qc_files(args.project_config_file,args.qc_summary_files, args.extracted_reads_dirs,integration_fn)
