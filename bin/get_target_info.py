@@ -142,6 +142,8 @@ def get_target_info(metadata_fn, attp_reg_seq, attp_prime_seq,reference_path,car
             if result:
                 bases, left_half, right_half, spacer_jmin_cutsite, spacer_jmax_cutsite, closest_gene, direction_of_transcription = result
             
+
+
             left_half_list = [int(x) for x in left_half.strip("[]").split(",")]
             right_half_list = [int(x) for x in right_half.strip("[]").split(",")]
 
@@ -156,7 +158,7 @@ def get_target_info(metadata_fn, attp_reg_seq, attp_prime_seq,reference_path,car
 
             beacon_sequence = beacon_beginning_sequence + bases + beacon_end_sequence
 
-            wt_command = f'samtools faidx {reference_path} {chr}:{int(spacer_jmin_cutsite)}-{int(spacer_jmin_cutsite)}'
+            wt_command = f'samtools faidx {reference_path} {chr}:{int(spacer_jmin_cutsite)}-{int(spacer_jmax_cutsite)}'
 
             wt_sequence = ''.join(subprocess.check_output(wt_command, shell=True).decode(sys.stdout.encoding).split('\n')[1:]).upper()
             attL = (beacon_beginning_sequence + b_reg_sequence + attp_prime_seq).upper()
