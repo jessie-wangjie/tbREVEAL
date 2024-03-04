@@ -195,9 +195,13 @@ def get_target_info(metadata_fn, attp_reg_seq, attp_prime_seq,reference_path,car
             attR_quant_lower_bound = position_of_attR_dinucleotide_lower - 3
             attR_quant_upper_bound = position_of_attR_dinucleotide_upper + 3
 
+            wt_quant_lower_bound = 1
+            wt_quant_upper_bound = len(wt_sequence)
+
             beacon_quant_window_string = id + ':dinuc:' + str(beacon_quant_lower_bound) + '-' + str(beacon_quant_upper_bound) + ':0'
             attL_quant_window_string = id + ':dinuc:' + str(attL_quant_lower_bound) + '-' + str(attL_quant_upper_bound) + ':0'
             attR_quant_window_string = id + ':dinuc:' + str(attR_quant_lower_bound) + '-' + str(attR_quant_upper_bound) + ':0'
+            wt_quant_window_string = id + ':dinuc:' + str(wt_quant_lower_bound) + '-' + str(wt_quant_upper_bound) + ':0'
 
             threat_tier = 'N/A'
             overlapping_feature = 'N/A'
@@ -213,7 +217,7 @@ def get_target_info(metadata_fn, attp_reg_seq, attp_prime_seq,reference_path,car
             beacon_quant_windows.append(beacon_quant_window_string)
             attL_quant_windows.append(attL_quant_window_string)
             attR_quant_windows.append(attR_quant_window_string)
-            wt_quant_windows.append('')
+            wt_quant_windows.append(wt_quant_window_string)
             threat_tiers.append(threat_tier)
             overlapping_features.append(overlapping_feature)
             gene_names.append(closest_gene)
@@ -317,6 +321,7 @@ def get_target_info(metadata_fn, attp_reg_seq, attp_prime_seq,reference_path,car
             beacon_quant_window_string = id + ':dinuc:' + str(beacon_quant_lower_bound) + '-' + str(beacon_quant_upper_bound) + ':0'
             attL_quant_window_string = id + ':dinuc:' + str(attL_quant_lower_bound) + '-' + str(attL_quant_upper_bound) + ':0'
             attR_quant_window_string = id + ':dinuc:' + str(attR_quant_lower_bound) + '-' + str(attR_quant_upper_bound) + ':0'
+            wt_quant_window_string = beacon_quant_window_string
 
             if closest_gene is None:
                 gene_list = []
@@ -347,7 +352,7 @@ def get_target_info(metadata_fn, attp_reg_seq, attp_prime_seq,reference_path,car
             beacon_quant_windows.append(beacon_quant_window_string)
             attL_quant_windows.append(attL_quant_window_string)
             attR_quant_windows.append(attR_quant_window_string)
-            wt_quant_windows.append('')
+            wt_quant_windows.append(wt_quant_window_string)
             threat_tiers.append(threat_tier)
             overlapping_features.append(overlapping_feature)
             gene_names.append(gene_name)
