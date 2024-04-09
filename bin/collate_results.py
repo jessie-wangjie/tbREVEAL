@@ -3,7 +3,7 @@
 import os
 import pandas as pd
 import argparse
-import glob 
+import glob
 from openpyxl.styles import Border, Side
 import numpy as np
 
@@ -37,17 +37,16 @@ def collate_integration_files(project_info, integration_stats_filenames, project
     for index,row in project_info_df.iterrows():
         sample_name = row['sample_name']
         group = row['group']
-        
+
         file_path = [i for i in integration_stats_filenames if sample_name in i][0]
-        
+
         # Check if the file exists
         if os.path.exists(file_path):
             df = pd.read_csv(file_path)
-            print(df[df['Number of WT Reads'] > 0])
             df['Fidelity Percentage'] = 100*df[f'Complete Beacon Placement']/df[f'Partial Beacon Placement']
             df['Max Complete Recombination'] = df[['Number of AttL Complete Reads','Number of AttR Complete Reads']].max(axis=1)
             df['Max Cargo Recombination'] = df[['Number of AttL Cargo Reads','Number of AttR Cargo Reads']].max(axis=1)
-            
+
             # Define the base columns
             base_columns = ['Target', 'Closest Gene Name', 'Gene Strand', 'Distance from Gene', 'Same Strand as Cryptic', 'Overlapping Feature', 'Threat Tier']
 
@@ -61,7 +60,7 @@ def collate_integration_files(project_info, integration_stats_filenames, project
                 integration_short_cols = [col for col in df.columns if 'Partial P Integration Percentage' in col or 'Partial Reads' in col or 'Partial Beacon Reads' in col or 'WT Reads' in col or 'Max Partial Recombination' in col]
             elif collapse_condition == 'Cargo':
                 integration_short_cols = [col for col in df.columns if 'Cargo and P Integration Percentage' in col or 'Cargo Reads' in col or 'Complete Beacon Reads' in col or 'Partial Beacon Reads' in col or 'WT Reads' in col or 'Max Cargo Recombination' in col]
-            
+
 
             # Rename columns to include sample name
             renamed_integration_cols = [f"{sample_name}_{col}" for col in integration_cols]
@@ -69,7 +68,7 @@ def collate_integration_files(project_info, integration_stats_filenames, project
             renamed_integration_short_cols = [f"{sample_name}_{col}" for col in integration_short_cols]
 
             df_integration = df[integration_cols]
-            
+
             df_reads = df[reads_cols]
 
             df_integration_short = df[integration_short_cols]
@@ -100,7 +99,7 @@ def collate_integration_files(project_info, integration_stats_filenames, project
         temp_df = pd.concat(dfs_reads[key],axis=1)
         temp_df = temp_df.loc[:, ~temp_df.columns.duplicated()]
         merged_reads_dfs.append(temp_df)
-    
+
     merged_reads_dfs_combined = pd.concat(merged_reads_dfs,axis=1)
     merged_reads_dfs_combined = pd.concat([base_columns_df,merged_reads_dfs_combined],axis=1)
 
@@ -113,13 +112,14 @@ def collate_integration_files(project_info, integration_stats_filenames, project
         else:
             merged_short_integration_dfs[key].append(temp_df)
         tmp_lst.append(temp_df)
-    
+
     merged_short_integration_dfs_combined = pd.concat(tmp_lst,axis=1)
     merged_short_integration_dfs_combined = pd.concat([base_columns_df,merged_short_integration_dfs_combined],axis=1)
 
     dfs_by_condition = []
 
     for key in merged_short_integration_dfs:
+
         temp_df = pd.concat(merged_short_integration_dfs[key],axis=1)
         temp_df = pd.concat([base_columns_df,temp_df],axis=1)
         attL_total = temp_df.filter(like=f'AttL {collapse_condition}').sum(axis=1)
@@ -130,15 +130,15 @@ def collate_integration_files(project_info, integration_stats_filenames, project
 
         partial_beacon_total = temp_df.filter(like='Partial Beacon Reads').sum(axis=1)
         complete_beacon_total = temp_df.filter(like='Complete Beacon Reads').sum(axis=1)
-        wt_total = temp_df.filter(like='WT').sum(axis=1)
+        wt_total = temp_df.filter(like='WT Reads').sum(axis=1)
         total_conversion_percentage = 100*(att_max_total) / (att_max_total + complete_beacon_total)
-        total_PGI_percentage = 100*(att_max_total) / (att_max_total + complete_beacon_total + wt_total)
-        total_beacon_percentage = 100*(partial_beacon_total + att_max_total) / (att_max_total + partial_beacon_total + wt_total)
+        total_PGI_percentage = 100*(att_max_total) / (att_max_total + complete_beacon_total + partial_beacon_total + wt_total)
+        total_beacon_percentage = 100*(partial_beacon_total + complete_beacon_total + att_max_total) / (att_max_total + partial_beacon_total + complete_beacon_total + wt_total)
         complete_beacon_percentage = 100*(complete_beacon_total + att_max_total) / (att_max_total + complete_beacon_total + partial_beacon_total + wt_total)
-        beacon_fidelity_percentage = 100*complete_beacon_percentage/total_beacon_percentage
+        beacon_fidelity_percentage = 100*(complete_beacon_percentage)/(total_beacon_percentage)
         indel_percentage = 100 * (indel_total / (attL_total + attR_total + wt_total + complete_beacon_total + partial_beacon_total))
-        df_by_condition = pd.DataFrame({f'{key} AttL Total': attL_total, 
-                                    f'{key} AttR Total': attR_total, 
+        df_by_condition = pd.DataFrame({f'{key} AttL Total': attL_total,
+                                    f'{key} AttR Total': attR_total,
                                     f'{key} Indel Total': indel_total,
                                     f'{key} Recombined Total': att_max_total,
                                     f'{key} Partial Beacon Total': partial_beacon_total,
@@ -156,7 +156,7 @@ def collate_integration_files(project_info, integration_stats_filenames, project
     dfs_by_condition_concat = pd.concat(dfs_by_condition,axis=1)
     dfs_by_condition_concat = pd.concat([base_columns_df,dfs_by_condition_concat],axis=1)
     dfs_by_condition_concat = dfs_by_condition_concat.fillna(0)
-    
+
     output_fn = f'{project_name}_results.xlsx'
     # Save the two sheets into an Excel file
     with pd.ExcelWriter(output_fn, engine='openpyxl') as writer:
@@ -164,23 +164,23 @@ def collate_integration_files(project_info, integration_stats_filenames, project
         merged_reads_dfs_combined.to_excel(writer, sheet_name='Integration Reads', index=False)
         merged_short_integration_dfs_combined.to_excel(writer, sheet_name='Condensed Results', index=False)
         dfs_by_condition_concat.to_excel(writer, sheet_name='Results by Condition', index=False)
-        
+
         # # Now, add a thick border using openpyxl
         # for sheet_name, df, interval in zip(["Integration Percent", "Integration Reads", "Condensed Results","Results by Condition"], [merged_integrations_dfs_combined, merged_reads_dfs_combined,merged_short_integration_dfs_combined], [6, 9, 5]):
         #     ws = writer.sheets[sheet_name]
-            
+
         #     # Define thick border
         #     thick_border_left = Border(left=Side(style='thick'))
-            
+
         #     # Determine the columns to apply borders
         #     cols_to_border = [8]  # For the "Threat Tier" column
         #     cols_to_border += list(range(8 + interval, len(df.columns) + 1, interval))
-            
+
         #     for idx in cols_to_border:
         #         for row in ws.iter_rows(min_col=idx, max_col=idx, min_row=1, max_row=len(df)+1):
         #             for cell in row:
         #                 cell.border = thick_border_left
-    
+
     return(output_fn)
 
 
@@ -197,7 +197,7 @@ def collate_indel_files(project_info, attL_indel_table_filenames, attR_indel_tab
 
         attL_indel_table = [i for i in attL_indel_table_filenames if sample_name in i][0]
         attR_indel_table = [i for i in attR_indel_table_filenames if sample_name in i][0]
-        
+
         # Read the csv files into dataframes
         df1 = pd.read_csv(attL_indel_table)
         df2 = pd.read_csv(attR_indel_table)
@@ -234,7 +234,7 @@ def collate_indel_files(project_info, attL_indel_table_filenames, attR_indel_tab
     # Split columns based on presence of "%"
     percentage_cols = [col for col in combined_df.columns if "%" in col]
     non_percentage_cols = [col for col in combined_df.columns if "%" not in col and 'Amplicon' not in col]
-    
+
     # Create two separate dataframes
     df_reads = combined_df[['Amplicon'] + non_percentage_cols]
     df_percent = combined_df[['Amplicon'] + percentage_cols]
@@ -246,7 +246,7 @@ def collate_indel_files(project_info, attL_indel_table_filenames, attR_indel_tab
     with pd.ExcelWriter(excel_filename, engine='openpyxl', mode='a') as writer:
         df_percent.to_excel(writer, sheet_name=f"Indel Percent", index=False)
         df_reads.to_excel(writer, sheet_name=f"Indel Reads", index=False)
-        
+
 def collate_reads_per_site_files(project_info,read_counts_per_site_filenames, excel_filename):
     project_info_df  = pd.read_csv(project_info)
 
@@ -334,7 +334,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     results_output_fn = f"{args.project_name}_results.xlsx"
-    
+
     integration_fn = collate_integration_files(args.project_config_file, args.integration_stats_files, args.project_name, args.collapse_condition_by)
     collate_reads_per_site_files(args.project_config_file,args.read_counts_per_site_files, integration_fn)
     collate_qc_files(args.project_config_file,args.qc_summary_files, args.extracted_reads_dirs,integration_fn)

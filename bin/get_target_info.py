@@ -7,7 +7,7 @@ from Bio import SeqIO
 from Bio.Seq import Seq
 from Bio.SeqRecord import SeqRecord
 from collections import defaultdict
-import pandas as pd 
+import pandas as pd
 from utils.base import *
 import subprocess
 import sys
@@ -40,26 +40,52 @@ def get_target_info(metadata_fn, attp_reg_seq, attp_prime_seq,reference_path,car
 
     df = pd.read_csv(metadata_fn)
 
+    updated_records = []
+
     for index, row in df.iterrows():
         id = row['Target']
-        # OT are CAS9 mediated off-targets
+        pair_ids = row['Target'].split(';')
+        for pair_id in pair_ids:
+            query = '''
+            SELECT
+                strand
+            FROM
+                integrase_cryptic_attachment_site AS att_site_table
+            WHERE
+                file_registry_id$ = %s
+            '''
+            cur.execute(query, [pair_id])
+            result = cur.fetchone()
+
+            if result:
+                strand = result
+                final_record = [pair_id,row['Chromosome'],row['Start'],row['Stop'],strand]
+                updated_records.append(final_record)
+
+    updated_df = pd.DataFrame(updated_records, columns=['Target', 'Chromosome', 'Start', 'Stop', 'Strand'])
+    print(updated_df)
+
+    for index, row in updated_df.iterrows():
+        id = row['Target']
+        print(id)
+        # OT are Cas9 mediated off-targets
         if 'OT' in id:
-            target = df[df.Target == id]['Target'].iloc[0]
-            chr = df[df.Target == id]['Chromosome'].iloc[0]
-            start = df[df.Target == id]['Start'].iloc[0]
-            end = df[df.Target == id]['Stop'].iloc[0]
-            strand = df[df.Target == id]['Strand'].iloc[0]
+            target = updated_df[updated_df.Target == id]['Target'].iloc[0]
+            chr = updated_df[updated_df.Target == id]['Chromosome'].iloc[0]
+            start = updated_df[updated_df.Target == id]['Start'].iloc[0]
+            end = updated_df[updated_df.Target == id]['Stop'].iloc[0]
+            strand = updated_df[updated_df.Target == id]['Strand'].iloc[0]
 
             if '_' in chr:
                 continue
 
             if 'chr' not in chr:
-                chr = 'chr' + chr  
+                chr = 'chr' + chr
 
             query = '''
-            SELECT 
+            SELECT
                 chr, start, spacer_off_target.end, strand, overlap_gene, overlap_gene_biotype, threat_tier
-            FROM 
+            FROM
                 spacer_off_target AS spacer_off_target
             WHERE
                 file_registry_id$ = %s
@@ -71,7 +97,7 @@ def get_target_info(metadata_fn, attp_reg_seq, attp_prime_seq,reference_path,car
 
             if result:
                 chr, start, end, strand, overlap_gene, overlap_gene_biotype, threat_tier = result
-            
+
             if strand == '-':
                 cut_pos = len_genomic_seq_to_include + 4
             elif strand == '+':
@@ -84,7 +110,7 @@ def get_target_info(metadata_fn, attp_reg_seq, attp_prime_seq,reference_path,car
             amplicon_sequence_command = f'samtools faidx {reference_path} {chr}:{int(start)-len_genomic_seq_to_include}-{int(end)+len_genomic_seq_to_include}'
             amplicon_sequence = ''.join(subprocess.check_output(amplicon_sequence_command, shell=True).decode(sys.stdout.encoding).split('\n')[1:]).upper()
             ot_quant_window_string = id + ':dinuc:' + str(ot_quant_lower_bound) + '-' + str(ot_quant_upper_bound) + ':0'
-            
+
             ids.append(id)
             chrs.append(chr)
             starts.append(start)
@@ -105,26 +131,26 @@ def get_target_info(metadata_fn, attp_reg_seq, attp_prime_seq,reference_path,car
             same_strands.append('True')
 
         elif 'AA' in id:
-            target = df[df.Target == id]['Target'].iloc[0]
-            chr = df[df.Target == id]['Chromosome'].iloc[0]
-            start = df[df.Target == id]['Start'].iloc[0]
-            end = df[df.Target == id]['Stop'].iloc[0]
-            strand = df[df.Target == id]['Strand'].iloc[0]
+            target = updated_df[updated_df.Target == id]['Target'].iloc[0]
+            chr = updated_df[updated_df.Target == id]['Chromosome'].iloc[0]
+            start = updated_df[updated_df.Target == id]['Start'].iloc[0]
+            end = updated_df[updated_df.Target == id]['Stop'].iloc[0]
+            strand = updated_df[updated_df.Target == id]['Strand'].iloc[0]
 
             if '_' in chr:
                 continue
 
             if 'chr' not in chr:
-                chr = 'chr' + chr    
+                chr = 'chr' + chr
 
             query = '''
             SELECT
                 bases, left_half, right_half, spacer_table.jmin, spacer_table.jmax, target_gene_name, direction_of_transcription
             FROM
                 atg_atg AS atg_table
-            JOIN 
+            JOIN
                 attachment_sequence as att_seq ON att_seq.id = atg_table.expected_beacon
-            JOIN 
+            JOIN
                 dna_sequence AS dna_sequence ON dna_sequence.id = atg_table.expected_beacon
             JOIN
                spacer_pair as spacer_table ON atg_table.spacer_pair = spacer_table.id
@@ -141,8 +167,6 @@ def get_target_info(metadata_fn, attp_reg_seq, attp_prime_seq,reference_path,car
 
             if result:
                 bases, left_half, right_half, spacer_jmin_cutsite, spacer_jmax_cutsite, closest_gene, direction_of_transcription = result
-            
-
 
             left_half_list = [int(x) for x in left_half.strip("[]").split(",")]
             right_half_list = [int(x) for x in right_half.strip("[]").split(",")]
@@ -167,7 +191,7 @@ def get_target_info(metadata_fn, attp_reg_seq, attp_prime_seq,reference_path,car
             # store cargo sequence so we can search for subsequence locations
             with open(cargo_reference_path, 'r') as f:
                 cargo_sequence = ''.join(line.strip() for line in f if not line.startswith('>')).upper()
-            
+
             cargo_pprime_end_loc = cargo_sequence.find(attp_prime_seq) + len(attp_prime_seq)
             cargo_preg_start_loc = cargo_sequence.find(attp_reg_seq)
 
@@ -207,7 +231,7 @@ def get_target_info(metadata_fn, attp_reg_seq, attp_prime_seq,reference_path,car
 
             threat_tier = 'N/A'
             overlapping_feature = 'N/A'
-            
+
             ids.append(id)
             chrs.append(chr)
             starts.append(start)
@@ -228,18 +252,17 @@ def get_target_info(metadata_fn, attp_reg_seq, attp_prime_seq,reference_path,car
             same_strands.append('True')
 
         elif 'CAS' in id:
-
-            target = df[df.Target == id]['Target'].iloc[0]
-            chr = df[df.Target == id]['Chromosome'].iloc[0]
-            start = df[df.Target == id]['Start'].iloc[0]
-            end = df[df.Target == id]['Stop'].iloc[0]
-            strand = df[df.Target == id]['Strand'].iloc[0]
+            target = updated_df[updated_df.Target == id]['Target'].iloc[0]
+            chr = updated_df[updated_df.Target == id]['Chromosome'].iloc[0]
+            start = updated_df[updated_df.Target == id]['Start'].iloc[0]
+            end = updated_df[updated_df.Target == id]['Stop'].iloc[0]
+            strand = updated_df[updated_df.Target == id]['Strand'].iloc[0]
 
             if '_' in chr:
                 continue
 
             if 'chr' not in chr:
-                chr = 'chr' + chr 
+                chr = 'chr' + chr
 
             query = '''
             SELECT
@@ -250,8 +273,8 @@ def get_target_info(metadata_fn, attp_reg_seq, attp_prime_seq,reference_path,car
                 central_nucleotides_start,
                 central_nucleotides_seq,
                 strand,
-                closest_gene,
-                threat_tier, 
+                overlap_gene,
+                threat_tier,
                 overlapping_feature
             FROM
                 integrase_cryptic_attachment_site AS att_site_table
@@ -273,7 +296,7 @@ def get_target_info(metadata_fn, attp_reg_seq, attp_prime_seq,reference_path,car
                 else:
                     cryptic_b_reg_command = f'samtools faidx {reference_path} {chr}:{start-len_genomic_seq_to_include}-{central_dinucleotide_start - 1}'
                     cryptic_b_prime_command = f'samtools faidx {reference_path} {chr}:{central_dinucleotide_start}-{end+len_genomic_seq_to_include}'
-            
+
             cryptic_b_reg_sequence = ''.join(subprocess.check_output(cryptic_b_reg_command, shell=True).decode(sys.stdout.encoding).split('\n')[1:]).upper()
             cryptic_b_prime_sequence = ''.join(subprocess.check_output(cryptic_b_prime_command, shell=True).decode(sys.stdout.encoding).split('\n')[1:]).upper()
 
@@ -290,7 +313,7 @@ def get_target_info(metadata_fn, attp_reg_seq, attp_prime_seq,reference_path,car
             # store cargo sequence so we can search for subsequence locations
             with open(cargo_reference_path, 'r') as f:
                 cargo_sequence = ''.join(line.strip() for line in f if not line.startswith('>')).upper()
-            
+
             cargo_pprime_end_loc = cargo_sequence.find(attp_prime_seq) + len(attp_prime_seq)
             cargo_preg_start_loc = cargo_sequence.find(attp_reg_seq)
 
@@ -302,10 +325,10 @@ def get_target_info(metadata_fn, attp_reg_seq, attp_prime_seq,reference_path,car
 
             length_of_dinucleotide = len(central_nucleotides_seq)
 
-            position_of_beacon_dinucleotide_lower = len_genomic_seq_to_include + (central_dinucleotide_start - start) + 1 
+            position_of_beacon_dinucleotide_lower = len_genomic_seq_to_include + (central_dinucleotide_start - start) + 1
             position_of_beacon_dinucleotide_upper = len_genomic_seq_to_include + (central_dinucleotide_start - start) + length_of_dinucleotide
 
-            position_of_attL_dinucleotide_lower = len_genomic_seq_to_include + (central_dinucleotide_start - start) + 1 
+            position_of_attL_dinucleotide_lower = len_genomic_seq_to_include + (central_dinucleotide_start - start) + 1
             position_of_attL_dinucleotide_upper = len_genomic_seq_to_include + (central_dinucleotide_start - start) + length_of_dinucleotide
 
             position_of_attR_dinucleotide_lower = len_cargo_to_include + len(attp_reg_seq) - length_of_dinucleotide + 1
@@ -342,7 +365,7 @@ def get_target_info(metadata_fn, attp_reg_seq, attp_prime_seq,reference_path,car
             gene_name = "/".join(gene_name)
             gene_strand = "/".join(gene_strand)
             gene_distance = "/".join(gene_distance)
-            
+
             ids.append(id)
             chrs.append(chr)
             starts.append(start)
@@ -361,8 +384,8 @@ def get_target_info(metadata_fn, attp_reg_seq, attp_prime_seq,reference_path,car
             gene_strands.append(gene_strand)
             gene_distances.append(gene_distance)
             same_strands.append(same_strand)
-    
-    
+
+
     data = {
         'id': ids,
         'chromosome': chrs,

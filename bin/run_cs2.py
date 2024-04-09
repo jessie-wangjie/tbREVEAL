@@ -19,7 +19,7 @@ def get_amplicon_sequence(amplicon_path, chr_name):
 def run_cs2_for_type(amplicon_dir, bam_dir, target_info_df, junction_type, sample_name):
 
     reads_dir = f'{sample_name}_{junction_type}_extracted_reads'
-    
+
     for _, row in target_info_df.iterrows():
         id = row['id']
         quant_window = row.get(f'{junction_type}_quant_window', None)
@@ -33,53 +33,17 @@ def run_cs2_for_type(amplicon_dir, bam_dir, target_info_df, junction_type, sampl
             quant_window_range = f"{quant_window_lower_bound}-{quant_window_upper_bound}"
 
         fastq_fn = f"{reads_dir}/{id}_{junction_type}.fastq"
-        
+
         if os.path.exists(fastq_fn):
             amplicon_path = f"{amplicon_dir}/{id}_amplicon.fasta"
             bam_path = f"{bam_dir}/{id}_alignment.bam"
             amplicon_sequence = get_amplicon_sequence(amplicon_path, f"{junction_type}_amplicon")
-            
-            # crispresso_command = [
-            #     "CRISPResso", "--fastq_r1", fastq_fn, 
-            #     "--amplicon_seq", amplicon_sequence, 
-            #     "--amplicon_name", id, 
-            #     "--name", f"{id}_{junction_type}", 
-            #     "--write_detailed_allele_table", 
-            #     "--bam_output", 
-            #     "--exclude_bp_from_left", "0", 
-            #     "--exclude_bp_from_right", "0", 
-            #     "--amplicon_min_alignment_score", "5"
-            # ]
-            # if quant_window_range:
-            #     crispresso_command.extend(["--quantification_window_coordinates", quant_window_range])
-            
-            #subprocess.run(crispresso_command)
-            
-            #os.makedirs(f"CRISPResso_on_{id}_{junction_type}/cs2_alignment_html", exist_ok=True)
-            
-            # allele2html_command = f"/data/tbHCA/bin/utils/allele2html.py -f CRISPResso_on_{id}_{junction_type}/ -r {id}"
+
             allele2html_command = f"/data/tbHCA/bin/utils/bam2html.py -s {bam_path} -f {amplicon_path} -r {junction_type}_amplicon -o {id}_{junction_type}_alignment.html"
+            print(allele2html_command)
             if quant_window:
                 allele2html_command += f" -b {quant_window_range}"
             subprocess.call(allele2html_command, shell=True)
-
-    # pattern = f"CRISPResso_on_*_{junction_type}/CRISPResso_quantification_of_editing_frequency.txt"
-    # destination_folder = f"{sample_name}_cs2_{junction_type}"
-
-    # matching_files = glob.glob(pattern)
-    # for file_path in matching_files:
-    #     file_name = os.path.basename(file_path)
-    #     destination_path = os.path.join(destination_folder, file_name)
-    #     shutil.move(file_path, destination_path)
-    
-    # pattern = f"CRISPResso_on_*_{junction_type}/cs2_alignment_html/*.html"
-    # destination_folder = f"{sample_name}_{junction_type}_alignments"
-
-    # matching_files = glob.glob(pattern)
-    # for file_path in matching_files:
-    #     file_name = os.path.basename(file_path)
-    #     destination_path = os.path.join(destination_folder, file_name)
-    #     shutil.move(file_path, destination_path)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Process reads and amplicons.')
