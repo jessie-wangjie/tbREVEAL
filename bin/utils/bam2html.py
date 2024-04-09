@@ -1,4 +1,5 @@
 #!/usr/bin/env python
+
 """
 Smith-Waterman Aligner Wrapper
 
@@ -24,7 +25,7 @@ ALIGN_MISMATCH = "<span class=\"mm{nt}\">{nt}</span>"
 ALIGN_INSERTION = "<span class=\"insertion\" len=\"{len}\" seq=\"{seq}\">{pre}</span>"
 ALIGN_DELETION = "<span class=\"deletion\">{seq}</span>"
 ALIGN_SOFTCLIP = "<span class=\"softclip\" len=\"{len}\">{seq}</span>"
-ALIGN_RECORD = "<tr><td>{alignment}</td><td>{count}</td><td>{frac:.2f}%</td></tr>"
+ALIGN_RECORD = "<tr class=\"{indel}\"><td>{alignment}</td><td>{count}</td><td>{frac:.2f}%</td></tr>"
 
 HTML_HEADER = '''
 <!DOCTYPE html>
@@ -32,10 +33,10 @@ HTML_HEADER = '''
 <head>
 <meta charset="UTF-8">
 <title>Alignment Output</title>
-<link 
-    rel="stylesheet" 
-    href="https://cdn.jsdelivr.net/npm/bootstrap@4.6.0/dist/css/bootstrap.min.css" 
-    integrity="sha384-B0vP5xmATw1+K9KRQjQERJvTumQW0nPEzvF6L/Z6nronJ3oUOFUFpCjEUQouq2+l" 
+<link
+    rel="stylesheet"
+    href="https://cdn.jsdelivr.net/npm/bootstrap@4.6.0/dist/css/bootstrap.min.css"
+    integrity="sha384-B0vP5xmATw1+K9KRQjQERJvTumQW0nPEzvF6L/Z6nronJ3oUOFUFpCjEUQouq2+l"
     crossorigin="anonymous">
 <style>
     .alignment { font-family: 'PT Mono', 'Courier New', monospace; white-space: nowrap; }
@@ -54,8 +55,8 @@ HTML_HEADER = '''
     .counts { color: #FF8C00; }
     .freq { color: #FF00FF; }
 </style>
-<script src="https://code.jquery.com/jquery-2.2.4.min.js" 
-        integrity="sha256-BbhdlvQf/xTY9gja0Dq3HiwQF8LaCRTXxZKRutelT44=" 
+<script src="https://code.jquery.com/jquery-2.2.4.min.js"
+        integrity="sha256-BbhdlvQf/xTY9gja0Dq3HiwQF8LaCRTXxZKRutelT44="
         crossorigin="anonymous">
 </script>
 </head>
@@ -64,6 +65,7 @@ HTML_HEADER = '''
     <div class="row">
         <button type="button" class="btn btn-info" id="expand_insertion">Expand All Insertions</button>
         <button type="button" class="btn btn-danger" id="remove_deletions">Remove All Deletions</button>
+        <button type="button" class="btn btn-primary" id="remove_non_indel">Hide Alignments with NO indels</button>
     </div>
 </div>
 <div class="alignment">
@@ -83,7 +85,7 @@ HTML_TAIL = '''
     </table>
 </div>
 <script>
- 
+
 $('#expand_insertion').click(function() {
  $('.insertion').each(function(idx, item) {
    let a = $(item);
@@ -94,12 +96,12 @@ $('#expand_insertion').click(function() {
  });
 $('#expand_insertion').prop("disabled", true);
 });
- 
+
 $('#remove_deletions').click(function(){
  $('.deletion').remove();
  $('#remove_deletions').prop("disabled", true);
 });
- 
+
 $('#remove_non_indel').click(function(){
  if($('#remove_non_indel').html().trim().substring(0,4) === "Hide") {
    $('.no_indel').hide(600);
@@ -109,7 +111,7 @@ $('#remove_non_indel').click(function(){
    $('#remove_non_indel').html("Hide Alignments with NO indels")
  }
 });
- 
+
 $('#remove_indel').click(function(){
  if($('#remove_indel').html().trim().substring(0,4) === "Hide") {
    $('.has_indel').hide(600);
@@ -140,8 +142,7 @@ def bam_to_html(bam_file, fasta, region, highlight, outfh, top_n):
         ref_start = 1
         ref_end = fa.get_reference_length(chr)
     ref_seq = fa.fetch(chr, ref_start - 1, ref_end)
-    print(chr, ref_start - 1, ref_end)
-    print(ref_seq)
+
     # print the template
     h = []
     for qw in highlight:
@@ -165,34 +166,50 @@ def bam_to_html(bam_file, fasta, region, highlight, outfh, top_n):
 
     # iterate through the reads
     bam = AlignmentFile(bam_file, "rb")
+    # only fetch the alignments overlapping with the shown region
     for alignment in bam.fetch(chr, int(ref_start) - 1, int(ref_end)):
         total += 1
         buffer = ""
 
+        # skip the unmapped reads or not primary alignments or mapQ < 1
         if alignment.is_unmapped or alignment.is_secondary or alignment.mapping_quality < 1:
             continue
 
-        if alignment.reference_start > int(ref_start):
+        # add paddings for alignments which don't start 1bp of shown region
+        if alignment.reference_start + 1 > int(ref_start):
             buffer += ALIGN_PADDING.format(seq='+' * (alignment.reference_start - int(ref_start) + 1))
 
         i = alignment.query_alignment_start
         pos = alignment.get_aligned_pairs(with_seq=True)
+        indel = "no_indel"
+
         while i < len(pos):
+            # skip bases which are not within the shown region
             if (pos[i][1] is not None) and (pos[i][1] < int(ref_start) - 1 or pos[i][1] >= int(ref_end)):
+                i = i + 1
+                continue
+
+            # 3' soft-clip
+            if (pos[i][1] is None) and (pos[i][2] is None) and (int(alignment.query_alignment_end) <= pos[i][0]):
                 i = i + 1
                 continue
 
             # a deletion
             if pos[i][0] is None:
+                if h[0][0] - 1 <= pos[i][1] <= h[0][1]:
+                    indel = "has_indel"
                 buffer += ALIGN_DELETION.format(seq='+')
             # an insertion
             elif pos[i][1] is None:
                 prev_pos = pos[i - 1][1]
+                if h[0][0] - 1 <= prev_pos <= h[0][1]:
+                    indel = "has_indel"
+
                 insertions = alignment.query_sequence[pos[i][0]]
                 while i < len(pos) - 1 and pos[i + 1][1] is None:
                     i = i + 1
                     insertions += alignment.query_sequence[pos[i][0]]
-                if prev_pos >= int(ref_start) - 1 and prev_pos < int(ref_end):
+                if int(ref_start) - 1 <= prev_pos < int(ref_end):
                     prev = buffer[-1]
                     if prev == ">":
                         prev = ""
@@ -206,11 +223,11 @@ def bam_to_html(bam_file, fasta, region, highlight, outfh, top_n):
             else:
                 buffer += ALIGN_MATCH.format(seq=pos[i][2])
             i = i + 1
-        aligncounter[buffer] += 1  # increment the counter
+        aligncounter[tuple([buffer, indel])] += 1  # increment the counter
 
     # print out the top n
     for alignment, count in aligncounter.most_common(top_n):
-        outfh.write(ALIGN_RECORD.format(alignment=alignment, count=count, frac=100 * count / total))
+        outfh.write(ALIGN_RECORD.format(alignment=alignment[0], count=count, frac=100 * count / total, indel=alignment[1]))
 
 
 if __name__ == "__main__":
