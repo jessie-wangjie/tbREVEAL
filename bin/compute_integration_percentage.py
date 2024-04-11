@@ -81,7 +81,7 @@ def compute_integration_percentage(target_info, alignment_dir, sample_name):
         return start, end
 
     for index, row in target_info_df.iterrows():
-        alignment_file = f"{alignment_dir}/{row['id']}_alignment.bam"
+        alignment_file = f"{row['id']}_alignment.bam"
 
         attL_records = {}
         attR_records = {}
@@ -270,10 +270,10 @@ if __name__ == "__main__":
 
     # Add the arguments
     parser.add_argument("--target_info", required=True, type=str, help="Metadata file")
-    parser.add_argument("--alignment_dir", required=True, type=str, help="Alignment directory")
+    parser.add_argument("--bam", nargs='+',required=True, type=str, help="BAM files")
     parser.add_argument("--sample_name", required=True, type=str, help="Sample name")
     # Parse the arguments
     args = parser.parse_args()
 
-    integration_dict = compute_integration_percentage(args.target_info, args.alignment_dir,args.sample_name)
+    integration_dict = compute_integration_percentage(args.target_info, args.bam,args.sample_name)
     write_integration_percentage(integration_dict,args.sample_name)

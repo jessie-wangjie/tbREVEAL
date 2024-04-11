@@ -36,7 +36,7 @@ def alignment_visualization(amplicon_dir, bam_dir, target_info_df, junction_type
 
         if os.path.exists(fastq_fn):
             amplicon_path = f"{amplicon_dir}/{id}_amplicon.fasta"
-            bam_path = f"{bam_dir}/{id}_alignment.bam"
+            bam_path = f"{id}_alignment.bam"
             amplicon_sequence = get_amplicon_sequence(amplicon_path, f"{junction_type}_amplicon")
 
             allele2html_command = f"/data/tbHCA/bin/utils/bam2html.py -s {bam_path} -f {amplicon_path} -r {junction_type}_amplicon -o {id}_{junction_type}_alignment.html"
@@ -48,7 +48,7 @@ def alignment_visualization(amplicon_dir, bam_dir, target_info_df, junction_type
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Process reads and amplicons.')
     parser.add_argument('--amplicon_dir', type=str, help='Path to the directory containing amplicons.')
-    parser.add_argument('--bam_dir', type=str, help='Path to the directory containing alignments in BAM format.')
+    parser.add_argument('--bam', type=str, nargs = '+', help='Path to the directory containing alignments in BAM format.')
     parser.add_argument('--target_info', type=str, help='Path to the target information file.')
     parser.add_argument('--sample_name', type=str, help='Sample name')
 
@@ -56,4 +56,4 @@ if __name__ == "__main__":
 
     target_info_df = read_target_info(args.target_info)
     for junction_type in ['attL', 'attR', 'beacon', 'wt']:
-        alignment_visualization(args.amplicon_dir, args.bam_dir, target_info_df, junction_type, args.sample_name)
+        alignment_visualization(args.amplicon_dir, args.bam, target_info_df, junction_type, args.sample_name)
