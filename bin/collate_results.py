@@ -165,87 +165,8 @@ def collate_integration_files(project_info, integration_stats_filenames, project
         merged_short_integration_dfs_combined.to_excel(writer, sheet_name='Condensed Results', index=False)
         dfs_by_condition_concat.to_excel(writer, sheet_name='Results by Condition', index=False)
 
-        # # Now, add a thick border using openpyxl
-        # for sheet_name, df, interval in zip(["Integration Percent", "Integration Reads", "Condensed Results","Results by Condition"], [merged_integrations_dfs_combined, merged_reads_dfs_combined,merged_short_integration_dfs_combined], [6, 9, 5]):
-        #     ws = writer.sheets[sheet_name]
-
-        #     # Define thick border
-        #     thick_border_left = Border(left=Side(style='thick'))
-
-        #     # Determine the columns to apply borders
-        #     cols_to_border = [8]  # For the "Threat Tier" column
-        #     cols_to_border += list(range(8 + interval, len(df.columns) + 1, interval))
-
-        #     for idx in cols_to_border:
-        #         for row in ws.iter_rows(min_col=idx, max_col=idx, min_row=1, max_row=len(df)+1):
-        #             for cell in row:
-        #                 cell.border = thick_border_left
-
     return(output_fn)
 
-
-def collate_indel_files(project_info, attL_indel_table_filenames, attR_indel_table_filenames, excel_filename):
-    # subfolders = [f.path for f in os.scandir(base_dir) if f.is_dir()]
-    project_info_df  = pd.read_csv(project_info)
-    all_dfs = []
-
-    for index,row in project_info_df.iterrows():
-        sample_name = row['sample_name']
-        group = row['group']
-
-        # Paths for attL and attR indel tables
-
-        attL_indel_table = [i for i in attL_indel_table_filenames if sample_name in i][0]
-        attR_indel_table = [i for i in attR_indel_table_filenames if sample_name in i][0]
-
-        # Read the csv files into dataframes
-        df1 = pd.read_csv(attL_indel_table)
-        df2 = pd.read_csv(attR_indel_table)
-
-        df1['Indels'] = df1['Insertions'] + df1['Deletions']
-        df1['Indel%'] = 100*df1['Indels'] / df1['Input Reads']
-        df1['Substitution%'] = 100*df1['Substitution%']
-        df1['Insertion%'] = 100*df1['Insertion%']
-        df1['Deletion%'] = 100*df1['Deletion%']
-
-        df2['Indels'] = df2['Insertions'] + df2['Deletions']
-        df2['Indel%'] = 100*df2['Indels'] / df2['Input Reads']
-        df2['Substitution%'] = 100*df2['Substitution%']
-        df2['Insertion%'] = 100*df2['Insertion%']
-        df2['Deletion%'] = 100*df2['Deletion%']
-
-        # Concatenate df1 and df2 vertically
-        df = pd.concat([df1, df2])
-        df = df.sort_values('Input Reads', ascending=False)
-        df = df.drop_duplicates(subset='Amplicon', keep='first')
-
-        # Rename columns to include sample name, but keep 'Amplicon' unchanged
-        for column in df.columns:
-            if column != 'Amplicon':
-                df.rename(columns={column: f"{sample_name} {column}"}, inplace=True)
-
-        all_dfs.append(df)
-
-    # Merge all dataframes horizontally on 'Amplicon'
-    combined_df = all_dfs.pop(0)
-    for df in all_dfs:
-        combined_df = pd.merge(combined_df, df, on='Amplicon')
-
-    # Split columns based on presence of "%"
-    percentage_cols = [col for col in combined_df.columns if "%" in col]
-    non_percentage_cols = [col for col in combined_df.columns if "%" not in col and 'Amplicon' not in col]
-
-    # Create two separate dataframes
-    df_reads = combined_df[['Amplicon'] + non_percentage_cols]
-    df_percent = combined_df[['Amplicon'] + percentage_cols]
-
-    df_reads = df_reads.fillna(0)
-    df_percent = df_percent.fillna(0)
-
-    # Append both dataframes as separate sheets to the Excel file
-    with pd.ExcelWriter(excel_filename, engine='openpyxl', mode='a') as writer:
-        df_percent.to_excel(writer, sheet_name=f"Indel Percent", index=False)
-        df_reads.to_excel(writer, sheet_name=f"Indel Reads", index=False)
 
 def collate_reads_per_site_files(project_info,read_counts_per_site_filenames, excel_filename):
     project_info_df  = pd.read_csv(project_info)
@@ -324,8 +245,6 @@ if __name__ == "__main__":
     parser.add_argument("--project_name", help="Name of the project -- only affects output filenames")
     parser.add_argument("--project_config_file", required=True, help="Project config file")
     parser.add_argument("--integration_stats_files",nargs='+', required=True, help="Integration stats files")
-    parser.add_argument("--attL_indel_table_files",nargs='+', required=True, help="attL indel table files")
-    parser.add_argument("--attR_indel_table_files",nargs='+', required=True, help="attR indel table files")
     parser.add_argument("--read_counts_per_site_files",nargs='+', required=True, help="Read counts per site files")
     parser.add_argument("--qc_summary_files",nargs='+', required=True, help="QC Summary files")
     parser.add_argument("--extracted_reads_dirs",nargs='+', required=True, help="Extracted reads dirs")

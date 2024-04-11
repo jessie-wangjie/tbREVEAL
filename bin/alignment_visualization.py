@@ -16,7 +16,7 @@ def get_amplicon_sequence(amplicon_path, chr_name):
     amplicon_sequence = ''.join(subprocess.check_output(amplicon_sequence_command, shell=True).decode(sys.stdout.encoding).split('\n')[1:]).upper()
     return amplicon_sequence
 
-def run_cs2_for_type(amplicon_dir, bam_dir, target_info_df, junction_type, sample_name):
+def alignment_visualization(amplicon_dir, bam_dir, target_info_df, junction_type, sample_name):
 
     reads_dir = f'{sample_name}_{junction_type}_extracted_reads'
 
@@ -28,8 +28,8 @@ def run_cs2_for_type(amplicon_dir, bam_dir, target_info_df, junction_type, sampl
         quant_window_range = None
         if quant_window:
             quant_window_range = quant_window.split(':')[2]
-            quant_window_lower_bound = int(quant_window_range.split('-')[0]) - 1
-            quant_window_upper_bound = int(quant_window_range.split('-')[1]) - 1
+            quant_window_lower_bound = int(quant_window_range.split('-')[0])
+            quant_window_upper_bound = int(quant_window_range.split('-')[1])
             quant_window_range = f"{quant_window_lower_bound}-{quant_window_upper_bound}"
 
         fastq_fn = f"{reads_dir}/{id}_{junction_type}.fastq"
@@ -54,16 +54,6 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
-    os.makedirs(f'{args.sample_name}_cs2_attL', exist_ok=True)
-    os.makedirs(f'{args.sample_name}_cs2_attR', exist_ok=True)
-    os.makedirs(f'{args.sample_name}_cs2_beacon', exist_ok=True)
-    os.makedirs(f'{args.sample_name}_cs2_wt', exist_ok=True)
-
-    os.makedirs(f'{args.sample_name}_attL_alignments', exist_ok=True)
-    os.makedirs(f'{args.sample_name}_attR_alignments', exist_ok=True)
-    os.makedirs(f'{args.sample_name}_beacon_alignments', exist_ok=True)
-    os.makedirs(f'{args.sample_name}_wt_alignments', exist_ok=True)
-
     target_info_df = read_target_info(args.target_info)
     for junction_type in ['attL', 'attR', 'beacon', 'wt']:
-        run_cs2_for_type(args.amplicon_dir, args.bam_dir, target_info_df, junction_type, args.sample_name)
+        alignment_visualization(args.amplicon_dir, args.bam_dir, target_info_df, junction_type, args.sample_name)
