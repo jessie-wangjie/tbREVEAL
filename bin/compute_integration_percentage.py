@@ -141,9 +141,7 @@ def compute_integration_percentage(target_info, alignment_dir, sample_name):
 
                     (read.reference_name == 'beacon_amplicon' and 'CAS' in row['id'] and alignment_start > 21 or alignment_end < (21 + len(full_attb_sequence)),
                      ['ambiguous_beacon']),
-                    (read.reference_name == 'beacon_amplicon' and 'CAS' in row['id'] and alignment_start <= 21 and alignment_end >= (21 + len(full_attb_sequence)) and bool(re.search(full_attb_sequence, seq)) == False,
-                     ['partial_beacon']),
-                    (read.reference_name == 'beacon_amplicon' and 'CAS' in row['id'] and alignment_start <= 21 and alignment_end >= (21 + len(full_attb_sequence)) and bool(re.search(full_attb_sequence, seq)) == True,
+                    (read.reference_name == 'beacon_amplicon' and 'CAS' in row['id'] and alignment_start <= 21 and alignment_end >= (21 + len(full_attb_sequence)),
                      ['complete_beacon']),
 
                     # slightly different rule compared to CAS sites because cryptic B based on 46 bp attB and the beacon written is 38 bp
