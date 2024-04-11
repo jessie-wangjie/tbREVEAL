@@ -39,35 +39,54 @@ def get_target_info(metadata_fn, attp_reg_seq, attp_prime_seq,reference_path,car
     same_strands = []
 
     df = pd.read_csv(metadata_fn)
+    print(df)
 
     updated_records = []
 
     for index, row in df.iterrows():
+
         id = row['Target']
         pair_ids = row['Target'].split(';')
         for pair_id in pair_ids:
-            query = '''
-            SELECT
-                strand
-            FROM
-                integrase_cryptic_attachment_site AS att_site_table
-            WHERE
-                file_registry_id$ = %s
-            '''
-            cur.execute(query, [pair_id])
-            result = cur.fetchone()
-
-            if result:
-                strand = result
+            if 'CAS' in pair_id:
+                query = '''
+                SELECT
+                    strand
+                FROM
+                    integrase_cryptic_attachment_site AS att_site_table
+                WHERE
+                    file_registry_id$ = %s
+                '''
+                cur.execute(query, [pair_id])
+                result = cur.fetchone()
+                if result:
+                    strand = result
+                    final_record = [pair_id,row['Chromosome'],row['Start'],row['Stop'],strand]
+                    updated_records.append(final_record)
+            elif 'OT' in pair_id:
+                query = '''
+                SELECT
+                    strand
+                FROM
+                    spacer_off_target AS spacer_off_target
+                WHERE
+                    file_registry_id$ = %s
+                '''
+                cur.execute(query, [pair_id])
+                result = cur.fetchone()
+                if result:
+                    strand = result
+                    final_record = [pair_id,row['Chromosome'],row['Start'],row['Stop'],strand]
+                    updated_records.append(final_record)
+            else:
+                strand = row['Strand']
                 final_record = [pair_id,row['Chromosome'],row['Start'],row['Stop'],strand]
                 updated_records.append(final_record)
 
     updated_df = pd.DataFrame(updated_records, columns=['Target', 'Chromosome', 'Start', 'Stop', 'Strand'])
-    print(updated_df)
 
     for index, row in updated_df.iterrows():
         id = row['Target']
-        print(id)
         # OT are Cas9 mediated off-targets
         if 'OT' in id:
             target = updated_df[updated_df.Target == id]['Target'].iloc[0]

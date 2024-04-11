@@ -241,7 +241,7 @@ process GATHER_QC_INFO {
     """
 }
 
-process RUN_CS2_FOR_INDELS {
+process ALIGNMENT_VISUALIZATION {
     cache 'lenient'
     publishDir "${params.outdir}/alignment_visualizations/${sample_name}/attL_alignments/", pattern:'*attL*.html'
     publishDir "${params.outdir}/alignment_visualizations/${sample_name}/attR_alignments/", pattern:'*attR*.html'
@@ -259,63 +259,14 @@ process RUN_CS2_FOR_INDELS {
         path target_info
     output:
         val(sample_name), emit: sample_name
-        path("${sample_name}_cs2_attL"), emit: cs2_attL_dir
-        path("${sample_name}_cs2_attR"), emit: cs2_attR_dir
-        path("${sample_name}_cs2_beacon"), emit: cs2_beacon_dir
-        path("${sample_name}_cs2_wt"), emit: cs2_wt_dir
-
-        path("${sample_name}_attL_alignments"), optional: true, emit: cs2_attL_alignments
-        path("${sample_name}_attR_alignments"), optional: true, emit: cs2_attR_alignments
-        path("${sample_name}_beacon_alignments"), optional: true, emit: cs2_beacon_alignments
-        path("${sample_name}_wt_alignments"), optional: true, emit: cs2_wt_alignments
-
         path("*.html"), optional: true
 
     script:
     """
-    run_cs2.py --amplicon_dir ${amplicon_dir} --bam_dir ${bam_dir} --target_info ${target_info} --sample_name ${sample_name}
+    alignment_visualization.py --amplicon_dir ${amplicon_dir} --bam_dir ${bam_dir} --target_info ${target_info} --sample_name ${sample_name}
     """
 }
 
-process GET_INDEL_INFO_FROM_CS2_OUTPUT {
-    cache 'lenient'
-    publishDir "${params.outdir}/indel_info/${sample_name}/"
-    input:
-        val sample_name
-        path cs2_attL
-        path cs2_attR
-        path cs2_beacon
-    output:
-        val(sample_name), emit: sample_name
-        path("${sample_name}_attL_indel_table.csv"), emit: attL_indel_table
-        path("${sample_name}_attR_indel_table.csv"), emit: attR_indel_table
-        path("${sample_name}_beacon_indel_table.csv"), emit: beacon_indel_table
-
-    script:
-    """
-    get_indel_info.py --cs2_directory ${cs2_attL} --output_fn ${sample_name}_attL_indel_table.csv
-    get_indel_info.py --cs2_directory ${cs2_attR} --output_fn ${sample_name}_attR_indel_table.csv
-    get_indel_info.py --cs2_directory ${cs2_beacon} --output_fn ${sample_name}_beacon_indel_table.csv
-    """
-}
-
-process COMBINE_INTEGRATION_AND_INDEL_INFO {
-    cache 'lenient'
-    // publishDir "${params.outdir}/${sample_name}"
-    input:
-        val sample_name
-        path integration_table
-        path indel_attR_table
-        path indel_attL_table
-    output:
-        val(sample_name), emit: sample_name
-        path("${sample_name}_integration_and_indel_stats.csv"), emit: integration_and_indel_stats
-
-    script:
-    """
-    combine_integration_and_indel_stats.py --attL_indel_table ${indel_attL_table} --attR_indel_table ${indel_attR_table} --integration_table ${integration_table} --output_fn ${sample_name}_integration_and_indel_stats.csv
-    """
-}
 
 process GENERATE_REPORT {
     cache 'lenient'
@@ -323,8 +274,6 @@ process GENERATE_REPORT {
     input:
         path project_config_file
         path integration_stats_files
-        path attL_indel_table_files
-        path attR_indel_table_files
         path read_counts_per_site_files
         path qc_summary_files
         path extracted_reads_dirs
@@ -335,7 +284,7 @@ process GENERATE_REPORT {
 
     script:
         """
-        collate_results.py --project_config_file ${project_config_file} --integration_stats_files ${integration_stats_files} --attL_indel_table_files ${attL_indel_table_files} --attR_indel_table_files ${attR_indel_table_files} --read_counts_per_site_files ${read_counts_per_site_files} --qc_summary_files ${qc_summary_files} --extracted_reads_dirs ${extracted_reads_dirs} --collapse_condition ${collapse_condition} --project_name ${project_name}
+        collate_results.py --project_config_file ${project_config_file} --integration_stats_files ${integration_stats_files} --read_counts_per_site_files ${read_counts_per_site_files} --qc_summary_files ${qc_summary_files} --extracted_reads_dirs ${extracted_reads_dirs} --collapse_condition ${collapse_condition} --project_name ${project_name}
         """
     }
 
@@ -536,9 +485,7 @@ workflow {
         amplicons_dir = GENERATE_AMPLICONS(probe_information, sample_name)
         alignment_dir = ALIGN_TARGET_READS(probe_information, fastq_dir.sample_name, fastq_dir.extracted_reads_dir, amplicons_dir)
         att_sequence_dirs = MEASURE_INTEGRATION(probe_information,alignment_dir.sample_name, alignment_dir.probe_read_alignments)
-        cs2_attL_attR_dirs = RUN_CS2_FOR_INDELS(att_sequence_dirs.sample_name, alignment_dir.probe_read_alignments, att_sequence_dirs.attL_extracted_reads_dir, att_sequence_dirs.attR_extracted_reads_dir, att_sequence_dirs.beacon_extracted_reads_dir, att_sequence_dirs.wt_extracted_reads_dir, amplicons_dir, probe_information)
-        indel_tables = GET_INDEL_INFO_FROM_CS2_OUTPUT(cs2_attL_attR_dirs.sample_name, cs2_attL_attR_dirs.cs2_attL_dir, cs2_attL_attR_dirs.cs2_attR_dir, cs2_attL_attR_dirs.cs2_beacon_dir)
-        COMBINE_INTEGRATION_AND_INDEL_INFO(att_sequence_dirs.sample_name, att_sequence_dirs.integration_stats_file, indel_tables.attL_indel_table, indel_tables.attR_indel_table)
+        cs2_attL_attR_dirs = ALIGNMENT_VISUALIZATION(att_sequence_dirs.sample_name, alignment_dir.probe_read_alignments, att_sequence_dirs.attL_extracted_reads_dir, att_sequence_dirs.attR_extracted_reads_dir, att_sequence_dirs.beacon_extracted_reads_dir, att_sequence_dirs.wt_extracted_reads_dir, amplicons_dir, probe_information)
 
         // def samplesheet_absolute_path = "${launchDir}/${params.samplesheet}"
         // report_excel_file = GENERATE_REPORT(samplesheet_absolute_path,att_sequence_dirs.integration_stats_file.collect(), indel_tables.attL_indel_table.collect(), indel_tables.attR_indel_table.collect(), fastq_dir.read_counts_per_site_file.collect(), qc_summary.qc_summary_file.collect(), fastq_dir.extracted_reads_dir.collect(), params.collapse_condition, params.project_name)
@@ -554,11 +501,9 @@ workflow {
         alignment_dir = ALIGN_TARGET_READS(probe_information, fastq_dir.sample_name, fastq_dir.extracted_reads_dir, amplicons_dir)
         att_sequence_dirs = MEASURE_INTEGRATION(probe_information,alignment_dir.sample_name, alignment_dir.probe_read_alignments)
         qc_summary = GATHER_QC_INFO(trimmed_and_merged_fastq.fastp_stats, initial_alignment.original_alignment_bam, initial_alignment.deduped_alignment_bam, fastq_dir.extracted_reads_dir)
-        cs2_attL_attR_dirs = RUN_CS2_FOR_INDELS(att_sequence_dirs.sample_name, alignment_dir.probe_read_alignments, att_sequence_dirs.attL_extracted_reads_dir, att_sequence_dirs.attR_extracted_reads_dir, att_sequence_dirs.beacon_extracted_reads_dir, att_sequence_dirs.wt_extracted_reads_dir, amplicons_dir, probe_information)
-        indel_tables = GET_INDEL_INFO_FROM_CS2_OUTPUT(cs2_attL_attR_dirs.sample_name, cs2_attL_attR_dirs.cs2_attL_dir, cs2_attL_attR_dirs.cs2_attR_dir, cs2_attL_attR_dirs.cs2_beacon_dir)
-        COMBINE_INTEGRATION_AND_INDEL_INFO(att_sequence_dirs.sample_name, att_sequence_dirs.integration_stats_file, indel_tables.attL_indel_table, indel_tables.attR_indel_table)
+        cs2_attL_attR_dirs = ALIGNMENT_VISUALIZATION(att_sequence_dirs.sample_name, alignment_dir.probe_read_alignments, att_sequence_dirs.attL_extracted_reads_dir, att_sequence_dirs.attR_extracted_reads_dir, att_sequence_dirs.beacon_extracted_reads_dir, att_sequence_dirs.wt_extracted_reads_dir, amplicons_dir, probe_information)
         def samplesheet_absolute_path = "${launchDir}/${params.samplesheet}"
-        report_excel_file = GENERATE_REPORT(samplesheet_absolute_path,att_sequence_dirs.integration_stats_file.collect(), indel_tables.attL_indel_table.collect(), indel_tables.attR_indel_table.collect(), fastq_dir.read_counts_per_site_file.collect(), qc_summary.qc_summary_file.collect(), fastq_dir.extracted_reads_dir.collect(), params.collapse_condition, params.project_name)
+        report_excel_file = GENERATE_REPORT(samplesheet_absolute_path,att_sequence_dirs.integration_stats_file.collect(), fastq_dir.read_counts_per_site_file.collect(), qc_summary.qc_summary_file.collect(), fastq_dir.extracted_reads_dir.collect(), params.collapse_condition, params.project_name)
         MULTIQC(trimmed_and_merged_fastq.fastp_stats
             .flatten()  // Flatten the list
             .filter { it.toString().endsWith('.json') }  // Filter out only the paths ending with .json
