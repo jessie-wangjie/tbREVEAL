@@ -211,18 +211,36 @@ def compute_integration_percentage(target_info, alignment_dir, sample_name):
         complete_P_total = sum([counts[key] for key in ['complete_attL', 'complete_attR', 'complete_beacon', 'wt']])
         cargo_P_total = sum([counts[key] for key in ['cargo_attL', 'cargo_attR', 'complete_beacon', 'wt']])
 
-        # partial_att_max = max(counts['partial_attL'],counts['partial_attR'])
-        # complete_att_max = max(counts['complete_attL'],counts['complete_attR'])
-        # cargo_att_max = max(counts['cargo_attL'],counts['cargo_attR'])
-        # complete_beacon_total = counts['complete_beacon']
-        # partial_beacon_total = counts['partial_beacon']
-        # wt_total = counts['wt']
+        partial_att_max = max(counts['partial_attL'],counts['partial_attR'])
+        complete_att_max = max(counts['complete_attL'],counts['complete_attR'])
+        cargo_att_max = max(counts['cargo_attL'],counts['cargo_attR'])
+        complete_beacon_total = counts['complete_beacon']
+        partial_beacon_total = counts['partial_beacon']
+        wt_total = counts['wt']
 
-        # total_conversion_percentage = 100*(att_max_total) / (att_max_total + complete_beacon_total)
-        # total_PGI_percentage = 100*(att_max_total) / (att_max_total + complete_beacon_total + partial_beacon_total + wt_total)
-        # total_beacon_percentage = 100*(partial_beacon_total + complete_beacon_total + att_max_total) / (att_max_total + partial_beacon_total + complete_beacon_total + wt_total)
-        # complete_beacon_percentage = 100*(complete_beacon_total + att_max_total) / (att_max_total + complete_beacon_total + partial_beacon_total + wt_total)
-        # beacon_fidelity_percentage = 100*(complete_beacon_percentage)/(total_beacon_percentage)
+        total_conversion_percentage = 0
+        total_partial_PGI_percentage = 0
+        total_complete_PGI_percentage = 0
+        total_cargo_PGI_percentage = 0
+        total_beacon_percentage = 0
+        complete_beacon_percentage = 0
+        beacon_fidelity_percentage = 0
+
+        if complete_att_max + complete_beacon_total != 0:
+            total_conversion_percentage = 100*(complete_att_max) / (complete_att_max + complete_beacon_total)
+        if partial_att_max + complete_beacon_total + partial_beacon_total + wt_total != 0:
+            total_partial_PGI_percentage = 100*(partial_att_max) / (partial_att_max + complete_beacon_total + partial_beacon_total + wt_total)
+        if complete_att_max + complete_beacon_total + partial_beacon_total + wt_total != 0:
+            total_complete_PGI_percentage = 100*(complete_att_max) / (complete_att_max + complete_beacon_total + partial_beacon_total + wt_total)
+        if cargo_att_max + complete_beacon_total + partial_beacon_total + wt_total != 0:
+            total_cargo_PGI_percentage = 100*(cargo_att_max) / (cargo_att_max + complete_beacon_total + partial_beacon_total + wt_total)
+        if complete_att_max + partial_beacon_total + complete_beacon_total + wt_total != 0:
+            total_beacon_percentage = 100*(partial_beacon_total + complete_beacon_total + complete_att_max) / (complete_att_max + partial_beacon_total + complete_beacon_total + wt_total)
+        if complete_att_max + complete_beacon_total + partial_beacon_total + wt_total != 0:
+            complete_beacon_percentage = 100*(complete_beacon_total + complete_att_max) / (complete_att_max + complete_beacon_total + partial_beacon_total + wt_total)
+        if total_beacon_percentage != 0:
+            beacon_fidelity_percentage = 100*(complete_beacon_percentage)/(total_beacon_percentage)
+
         # indel_percentage = 100 * (indel_total / (attL_total + attR_total + wt_total + complete_beacon_total + partial_beacon_total))
 
         def calc_percentage(numerator, denominator):
@@ -239,12 +257,12 @@ def compute_integration_percentage(target_info, alignment_dir, sample_name):
             counts['partial_beacon'],
             counts['complete_beacon'],
             indel_counter,
-            calc_percentage(counts['partial_attL'] + counts['partial_attR'], partial_total),
-            calc_percentage(counts['complete_attL'] + counts['complete_attR'], complete_P_total),
-            calc_percentage(counts['cargo_attL'] + counts['cargo_attR'], cargo_P_total),
-            100 if 'CAS' in row['id'] else calc_percentage(counts['partial_beacon'] + counts['complete_beacon'] + counts['complete_attL'] + counts['complete_attR'], beacon_placement_denominator),
-            100 if 'CAS' in row['id'] else calc_percentage(counts['complete_beacon'] + counts['complete_attL'] + counts['complete_attR'], beacon_placement_denominator),
-            100 if 'CAS' in row['id'] else calc_percentage(counts['complete_beacon'], beacon_total),
+            total_partial_PGI_percentage,
+            total_complete_PGI_percentage,
+            total_cargo_PGI_percentage,
+            total_beacon_percentage,
+            complete_beacon_percentage,
+            beacon_fidelity_percentage,
             indel_percent
         ) + tuple(row[key] for key in ['gene_name', 'gene_strand', 'gene_distance', 'same_strand', 'overlapping_feature', 'threat_tier'])
     return integration_dict
