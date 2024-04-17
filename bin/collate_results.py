@@ -38,7 +38,7 @@ def collate_integration_files(project_info, integration_stats_filenames, project
         sample_name = row['sample_name']
         group = row['group']
 
-        file_path = [i for i in integration_stats_filenames if sample_name in i][0]
+        file_path = [i for i in integration_stats_filenames if str(sample_name) in i][0]
 
         # Check if the file exists
         if os.path.exists(file_path):
@@ -182,7 +182,7 @@ def collate_reads_per_site_files(project_info,read_counts_per_site_filenames, ex
 
         # Paths for attL and attR indel tables
 
-        filepath = [i for i in read_counts_per_site_filenames if sample_name in i][0]
+        filepath = [i for i in read_counts_per_site_filenames if str(sample_name) in i][0]
         df = pd.read_csv(filepath)
         # Change column names
         for column in df.columns:
@@ -211,8 +211,8 @@ def collate_qc_files(project_info,qc_filenames, extracted_reads_dirs, excel_file
         group = row['group']
 
         # Load the csv file
-        qc_filepath = [i for i in qc_filenames if sample_name in i][0]
-        extracted_reads_filepath = [i for i in extracted_reads_dirs if sample_name in i][0]
+        qc_filepath = [i for i in qc_filenames if str(sample_name) in i][0]
+        extracted_reads_filepath = [i for i in extracted_reads_dirs if str(sample_name) in i][0]
         df = pd.read_csv(qc_filepath, header=None)
 
         # Rename columns
