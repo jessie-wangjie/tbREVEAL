@@ -7,13 +7,13 @@ from Bio import SeqIO
 from Bio.Seq import Seq
 from Bio.SeqRecord import SeqRecord
 from collections import defaultdict
-import pandas as pd 
+import pandas as pd
 from utils.base import *
 import subprocess
 import sys
 import psycopg2
 
-def create_amplicon_files(target_info):
+def create_amplicon_files(target_info,exist_ok=True):
     # Specify the directory path
     amplicons_dir = 'amplicons'
     os.makedirs(amplicons_dir)

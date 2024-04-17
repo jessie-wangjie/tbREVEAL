@@ -187,19 +187,18 @@ process GENERATE_AMPLICONS {
 
 process ALIGN_TARGET_READS {
     cache 'lenient'
-    memory 8.GB
-    publishDir "${params.outdir}/read_to_probe_alignment/"
+    publishDir "${params.outdir}/read_to_probe_alignment/${sample_name}/", pattern:'*.bam*'
     input:
         path target_info
         val sample_name
         path fastq_dir
         path amplicon_dir
     output:
-        val(sample_name), emit: sample_name
-        path("${sample_name}_alignments"), emit: probe_read_alignments
+        val sample_name, emit: sample_name
+        path("*.bam*"), emit: probe_read_alignments
     script:
     """
-    align_extracted_reads.py --target_info ${target_info} --fastq_dir ${fastq_dir} --amplicon_dir ${amplicon_dir} --sample_name ${sample_name}
+    align_extracted_reads.py --target_info ${target_info} --fastq_dir ${fastq_dir} --amplicon_dir ${amplicon_dir}
     """
 }
 
@@ -220,7 +219,7 @@ process MEASURE_INTEGRATION {
 
     script:
     """
-    compute_integration_percentage.py --target_info ${target_info} --alignment_dir ${alignment_dir} --sample_name ${sample_name}
+    compute_integration_percentage.py --target_info ${target_info} --bam ${alignment_dir} --sample_name ${sample_name}
     """
 }
 
@@ -263,7 +262,7 @@ process ALIGNMENT_VISUALIZATION {
 
     script:
     """
-    alignment_visualization.py --amplicon_dir ${amplicon_dir} --bam_dir ${bam_dir} --target_info ${target_info} --sample_name ${sample_name}
+    alignment_visualization.py --amplicon_dir ${amplicon_dir} --bam ${bam_dir} --target_info ${target_info} --sample_name ${sample_name}
     """
 }
 

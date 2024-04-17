@@ -81,7 +81,7 @@ def compute_integration_percentage(target_info, alignment_dir, sample_name):
         return start, end
 
     for index, row in target_info_df.iterrows():
-        alignment_file = f"{alignment_dir}/{row['id']}_alignment.bam"
+        alignment_file = f"{row['id']}_alignment.bam"
 
         attL_records = {}
         attR_records = {}
@@ -141,9 +141,7 @@ def compute_integration_percentage(target_info, alignment_dir, sample_name):
 
                     (read.reference_name == 'beacon_amplicon' and 'CAS' in row['id'] and alignment_start > 21 or alignment_end < (21 + len(full_attb_sequence)),
                      ['ambiguous_beacon']),
-                    (read.reference_name == 'beacon_amplicon' and 'CAS' in row['id'] and alignment_start <= 21 and alignment_end >= (21 + len(full_attb_sequence)) and bool(re.search(full_attb_sequence, seq)) == False,
-                     ['partial_beacon']),
-                    (read.reference_name == 'beacon_amplicon' and 'CAS' in row['id'] and alignment_start <= 21 and alignment_end >= (21 + len(full_attb_sequence)) and bool(re.search(full_attb_sequence, seq)) == True,
+                    (read.reference_name == 'beacon_amplicon' and 'CAS' in row['id'] and alignment_start <= 21 and alignment_end >= (21 + len(full_attb_sequence)),
                      ['complete_beacon']),
 
                     # slightly different rule compared to CAS sites because cryptic B based on 46 bp attB and the beacon written is 38 bp
@@ -213,18 +211,36 @@ def compute_integration_percentage(target_info, alignment_dir, sample_name):
         complete_P_total = sum([counts[key] for key in ['complete_attL', 'complete_attR', 'complete_beacon', 'wt']])
         cargo_P_total = sum([counts[key] for key in ['cargo_attL', 'cargo_attR', 'complete_beacon', 'wt']])
 
-        # partial_att_max = max(counts['partial_attL'],counts['partial_attR'])
-        # complete_att_max = max(counts['complete_attL'],counts['complete_attR'])
-        # cargo_att_max = max(counts['cargo_attL'],counts['cargo_attR'])
-        # complete_beacon_total = counts['complete_beacon']
-        # partial_beacon_total = counts['partial_beacon']
-        # wt_total = counts['wt']
+        partial_att_max = max(counts['partial_attL'],counts['partial_attR'])
+        complete_att_max = max(counts['complete_attL'],counts['complete_attR'])
+        cargo_att_max = max(counts['cargo_attL'],counts['cargo_attR'])
+        complete_beacon_total = counts['complete_beacon']
+        partial_beacon_total = counts['partial_beacon']
+        wt_total = counts['wt']
 
-        # total_conversion_percentage = 100*(att_max_total) / (att_max_total + complete_beacon_total)
-        # total_PGI_percentage = 100*(att_max_total) / (att_max_total + complete_beacon_total + partial_beacon_total + wt_total)
-        # total_beacon_percentage = 100*(partial_beacon_total + complete_beacon_total + att_max_total) / (att_max_total + partial_beacon_total + complete_beacon_total + wt_total)
-        # complete_beacon_percentage = 100*(complete_beacon_total + att_max_total) / (att_max_total + complete_beacon_total + partial_beacon_total + wt_total)
-        # beacon_fidelity_percentage = 100*(complete_beacon_percentage)/(total_beacon_percentage)
+        total_conversion_percentage = 0
+        total_partial_PGI_percentage = 0
+        total_complete_PGI_percentage = 0
+        total_cargo_PGI_percentage = 0
+        total_beacon_percentage = 0
+        complete_beacon_percentage = 0
+        beacon_fidelity_percentage = 0
+
+        if complete_att_max + complete_beacon_total != 0:
+            total_conversion_percentage = 100*(complete_att_max) / (complete_att_max + complete_beacon_total)
+        if partial_att_max + complete_beacon_total + partial_beacon_total + wt_total != 0:
+            total_partial_PGI_percentage = 100*(partial_att_max) / (partial_att_max + complete_beacon_total + partial_beacon_total + wt_total)
+        if complete_att_max + complete_beacon_total + partial_beacon_total + wt_total != 0:
+            total_complete_PGI_percentage = 100*(complete_att_max) / (complete_att_max + complete_beacon_total + partial_beacon_total + wt_total)
+        if cargo_att_max + complete_beacon_total + partial_beacon_total + wt_total != 0:
+            total_cargo_PGI_percentage = 100*(cargo_att_max) / (cargo_att_max + complete_beacon_total + partial_beacon_total + wt_total)
+        if complete_att_max + partial_beacon_total + complete_beacon_total + wt_total != 0:
+            total_beacon_percentage = 100*(partial_beacon_total + complete_beacon_total + complete_att_max) / (complete_att_max + partial_beacon_total + complete_beacon_total + wt_total)
+        if complete_att_max + complete_beacon_total + partial_beacon_total + wt_total != 0:
+            complete_beacon_percentage = 100*(complete_beacon_total + complete_att_max) / (complete_att_max + complete_beacon_total + partial_beacon_total + wt_total)
+        if total_beacon_percentage != 0:
+            beacon_fidelity_percentage = 100*(complete_beacon_percentage)/(total_beacon_percentage)
+
         # indel_percentage = 100 * (indel_total / (attL_total + attR_total + wt_total + complete_beacon_total + partial_beacon_total))
 
         def calc_percentage(numerator, denominator):
@@ -241,12 +257,12 @@ def compute_integration_percentage(target_info, alignment_dir, sample_name):
             counts['partial_beacon'],
             counts['complete_beacon'],
             indel_counter,
-            calc_percentage(counts['partial_attL'] + counts['partial_attR'], partial_total),
-            calc_percentage(counts['complete_attL'] + counts['complete_attR'], complete_P_total),
-            calc_percentage(counts['cargo_attL'] + counts['cargo_attR'], cargo_P_total),
-            100 if 'CAS' in row['id'] else calc_percentage(counts['partial_beacon'] + counts['complete_beacon'] + counts['complete_attL'] + counts['complete_attR'], beacon_placement_denominator),
-            100 if 'CAS' in row['id'] else calc_percentage(counts['complete_beacon'] + counts['complete_attL'] + counts['complete_attR'], beacon_placement_denominator),
-            100 if 'CAS' in row['id'] else calc_percentage(counts['complete_beacon'], beacon_total),
+            total_partial_PGI_percentage,
+            total_complete_PGI_percentage,
+            total_cargo_PGI_percentage,
+            total_beacon_percentage,
+            complete_beacon_percentage,
+            beacon_fidelity_percentage,
             indel_percent
         ) + tuple(row[key] for key in ['gene_name', 'gene_strand', 'gene_distance', 'same_strand', 'overlapping_feature', 'threat_tier'])
     return integration_dict
@@ -270,10 +286,10 @@ if __name__ == "__main__":
 
     # Add the arguments
     parser.add_argument("--target_info", required=True, type=str, help="Metadata file")
-    parser.add_argument("--alignment_dir", required=True, type=str, help="Alignment directory")
+    parser.add_argument("--bam", nargs='+',required=True, type=str, help="BAM files")
     parser.add_argument("--sample_name", required=True, type=str, help="Sample name")
     # Parse the arguments
     args = parser.parse_args()
 
-    integration_dict = compute_integration_percentage(args.target_info, args.alignment_dir,args.sample_name)
+    integration_dict = compute_integration_percentage(args.target_info, args.bam,args.sample_name)
     write_integration_percentage(integration_dict,args.sample_name)
