@@ -16,9 +16,9 @@ def align_row(args):
     """
     Worker function to align each row.
     """
-    fastq_dir, amplicon_dir, row = args
-    fastq_file = f"{fastq_dir}/{row['id']}.fastq"
-    fasta_file = f"{amplicon_dir}/{row['id']}_amplicon.fasta"
+    fastq_dir, amplicon_dir, sample_name, row = args
+    fastq_file = f"{sample_name}_{row['id']}.fastq"
+    fasta_file = f"{row['id']}_amplicon.fasta"
     output_file = f"{row['id']}_alignment.sam"
     output_bam = f"{row['id']}_alignment.bam"  # This will now directly receive the sorted BAM output
 
@@ -30,11 +30,11 @@ def align_row(args):
 
     subprocess.run(f"samtools index {output_bam}", shell=True)
 
-def align(target_info, fastq_dir, amplicon_dir):
+def align(target_info, fastq_dir, amplicon_dir, sample_name):
     target_info_df = pd.read_csv(target_info)
 
     # Prepare jobs for multiprocessing
-    jobs = [(fastq_dir, amplicon_dir, row) for index, row in target_info_df.iterrows()]
+    jobs = [(fastq_dir, amplicon_dir, sample_name, row) for index, row in target_info_df.iterrows()]
 
     # Create a multiprocessing pool
     pool = multiprocessing.Pool(processes=multiprocessing.cpu_count())
@@ -52,9 +52,10 @@ if __name__ == "__main__":
 
     # Add the arguments
     parser.add_argument("--target_info", required=True, type=str, help="Metadata file")
-    parser.add_argument("--fastq_dir", required=True, type=str, help="fastq dir")
-    parser.add_argument("--amplicon_dir", required=True, type=str, help="amplicon dir")
+    parser.add_argument("--fastq_dir", nargs='+', required=True, type=str, help="fastq dir")
+    parser.add_argument("--amplicon_dir", nargs='+', required=True, type=str, help="amplicon dir")
+    parser.add_argument("--sample_name", required=True, type=str, help="sample name")
     # Parse the arguments
     args = parser.parse_args()
 
-    align(args.target_info, args.fastq_dir, args.amplicon_dir)
+    align(args.target_info, args.fastq_dir, args.amplicon_dir, args.sample_name)

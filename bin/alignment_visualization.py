@@ -16,7 +16,7 @@ def get_amplicon_sequence(amplicon_path, chr_name):
     amplicon_sequence = ''.join(subprocess.check_output(amplicon_sequence_command, shell=True).decode(sys.stdout.encoding).split('\n')[1:]).upper()
     return amplicon_sequence
 
-def alignment_visualization(amplicon_dir, bam_dir, target_info_df, junction_type, sample_name):
+def alignment_visualization(bam_dir, target_info_df, junction_type, sample_name):
 
     reads_dir = f'{sample_name}_{junction_type}_extracted_reads'
 
@@ -32,10 +32,10 @@ def alignment_visualization(amplicon_dir, bam_dir, target_info_df, junction_type
             quant_window_upper_bound = int(quant_window_range.split('-')[1])
             quant_window_range = f"{quant_window_lower_bound}-{quant_window_upper_bound}"
 
-        fastq_fn = f"{reads_dir}/{id}_{junction_type}.fastq"
+        fastq_fn = f"{id}_{junction_type}.fastq"
 
         if os.path.exists(fastq_fn):
-            amplicon_path = f"{amplicon_dir}/{id}_amplicon.fasta"
+            amplicon_path = f"{id}_amplicon.fasta"
             bam_path = f"{id}_alignment.bam"
             amplicon_sequence = get_amplicon_sequence(amplicon_path, f"{junction_type}_amplicon")
 
@@ -47,7 +47,6 @@ def alignment_visualization(amplicon_dir, bam_dir, target_info_df, junction_type
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Process reads and amplicons.')
-    parser.add_argument('--amplicon_dir', type=str, help='Path to the directory containing amplicons.')
     parser.add_argument('--bam', type=str, nargs = '+', help='Path to the directory containing alignments in BAM format.')
     parser.add_argument('--target_info', type=str, help='Path to the target information file.')
     parser.add_argument('--sample_name', type=str, help='Sample name')
@@ -56,4 +55,4 @@ if __name__ == "__main__":
 
     target_info_df = read_target_info(args.target_info)
     for junction_type in ['attL', 'attR', 'beacon', 'wt']:
-        alignment_visualization(args.amplicon_dir, args.bam, target_info_df, junction_type, args.sample_name)
+        alignment_visualization(args.bam, target_info_df, junction_type, args.sample_name)

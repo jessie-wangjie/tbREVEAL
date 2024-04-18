@@ -198,7 +198,7 @@ process ALIGN_TARGET_READS {
         path("*.bam*"), emit: probe_read_alignments
     script:
     """
-    align_extracted_reads.py --target_info ${target_info} --fastq_dir ${fastq_dir} --amplicon_dir ${amplicon_dir}
+    align_extracted_reads.py --target_info ${target_info} --fastq_dir ${fastq_dir} --amplicon_dir ${amplicon_dir} --sample_name ${sample_name}
     """
 }
 
@@ -212,11 +212,10 @@ process MEASURE_INTEGRATION {
     output:
         val(sample_name), emit: sample_name
         path("${sample_name}_integration_stats.csv"), emit: integration_stats_file
-        path("${sample_name}_attL_extracted_reads"), emit: attL_extracted_reads_dir
-        path("${sample_name}_attR_extracted_reads"), emit: attR_extracted_reads_dir
-        path("${sample_name}_beacon_extracted_reads"), emit: beacon_extracted_reads_dir
-        path("${sample_name}_wt_extracted_reads"), emit: wt_extracted_reads_dir
-
+        path("*_attL.fastq"), emit: attL_extracted_reads_dir ,optional: true
+        path("*_attR.fastq"), emit: attR_extracted_reads_dir, optional: true
+        path("*_beacon.fastq"), emit: beacon_extracted_reads_dir, optional: true
+        path("*_wt.fastq"), emit: wt_extracted_reads_dir, optional: true
     script:
     """
     compute_integration_percentage.py --target_info ${target_info} --bam ${alignment_dir} --sample_name ${sample_name}
@@ -236,7 +235,7 @@ process GATHER_QC_INFO {
         path "${sample_name}_qc_summary.csv", emit: qc_summary_file
     script:
     """
-    gather_qc_stats.py --json_file ${json_file} --fastq_dir ${fastq_dir} --sample_name ${sample_name} --original_bam_file ${original_bam_file} --deduped_bam_file ${deduped_bam_file}
+    gather_qc_stats.py --json_file ${json_file} --sample_name ${sample_name} --original_bam_file ${original_bam_file} --deduped_bam_file ${deduped_bam_file}
     """
 }
 
@@ -248,13 +247,9 @@ process ALIGNMENT_VISUALIZATION {
     publishDir "${params.outdir}/alignment_visualizations/${sample_name}/wt_alignments/", pattern:'*wt*.html'
 
     input:
-        val(sample_name)
+        val sample_name
+        path amplicons
         path bam_dir
-        path attL_extracted_reads_dir
-        path attR_extracted_reads_dir
-        path beacon_extracted_reads_dir
-        path wt_extracted_reads_dir
-        path amplicon_dir
         path target_info
     output:
         val(sample_name), emit: sample_name
@@ -262,7 +257,7 @@ process ALIGNMENT_VISUALIZATION {
 
     script:
     """
-    alignment_visualization.py --amplicon_dir ${amplicon_dir} --bam ${bam_dir} --target_info ${target_info} --sample_name ${sample_name}
+    alignment_visualization.py --bam ${bam_dir} --target_info ${target_info} --sample_name ${sample_name}
     """
 }
 
@@ -438,8 +433,6 @@ workflow {
         )
     }
     .set { bam_input_ch }
-
-    bam_input_ch.view()
     } else {
         // Existing logic to handle FASTQ file input
         Channel.fromPath(params.samplesheet)
@@ -497,10 +490,10 @@ workflow {
         initial_alignment = ALIGN_READS(reference_absolute_path, reference_index_ch, trimmed_and_merged_fastq.trimmed_fastq, params.initial_mapper, params.umi_deduplication)
         fastq_dir = EXTRACT_TARGET_READS(probe_information, initial_alignment.sample_name, initial_alignment.deduped_alignment_bam)
         amplicons_dir = GENERATE_AMPLICONS(probe_information,initial_alignment.sample_name)
-        alignment_dir = ALIGN_TARGET_READS(probe_information, fastq_dir.sample_name, fastq_dir.extracted_reads_dir, amplicons_dir)
+        alignment_dir = ALIGN_TARGET_READS(probe_information,fastq_dir.sample_name, fastq_dir.extracted_reads_dir, amplicons_dir)
         att_sequence_dirs = MEASURE_INTEGRATION(probe_information,alignment_dir.sample_name, alignment_dir.probe_read_alignments)
         qc_summary = GATHER_QC_INFO(trimmed_and_merged_fastq.fastp_stats, initial_alignment.original_alignment_bam, initial_alignment.deduped_alignment_bam, fastq_dir.extracted_reads_dir)
-        cs2_attL_attR_dirs = ALIGNMENT_VISUALIZATION(att_sequence_dirs.sample_name, alignment_dir.probe_read_alignments, att_sequence_dirs.attL_extracted_reads_dir, att_sequence_dirs.attR_extracted_reads_dir, att_sequence_dirs.beacon_extracted_reads_dir, att_sequence_dirs.wt_extracted_reads_dir, amplicons_dir, probe_information)
+        ALIGNMENT_VISUALIZATION(att_sequence_dirs.sample_name, amplicons_dir, alignment_dir.probe_read_alignments, probe_information)
         def samplesheet_absolute_path = "${launchDir}/${params.samplesheet}"
         report_excel_file = GENERATE_REPORT(samplesheet_absolute_path,att_sequence_dirs.integration_stats_file.collect(), fastq_dir.read_counts_per_site_file.collect(), qc_summary.qc_summary_file.collect(), fastq_dir.extracted_reads_dir.collect(), params.collapse_condition, params.project_name)
         MULTIQC(trimmed_and_merged_fastq.fastp_stats
@@ -508,7 +501,6 @@ workflow {
             .filter { it.toString().endsWith('.json') }  // Filter out only the paths ending with .json
             .collect()
             .ifEmpty([]))
-        //CREATE_PLOTS(report_excel_file.excel_output)
         initial_alignment.deduped_alignment_bam
             .groupTuple()
             .set { grouped_bam_files }

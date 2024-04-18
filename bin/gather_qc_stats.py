@@ -19,12 +19,12 @@ def parse_data(json_file,original_bam_fn,deduped_bam_fn,sample_name):
         # Corrected command using subprocess.Popen
         cmd = ['samtools', 'flagstat', bamfile, '-O', 'tsv']
         p = Popen(cmd, stdout=PIPE)
-        
+
         # Use another Popen for the cut and head commands or process the output in Python
         # It's more efficient to do the processing directly in Python
         mapped = 0
         unmapped = 0
-        
+
         for i, line in enumerate(p.stdout):
             if i == 0:  # Only the first line contains the total number of reads
                 total_reads = int(line.decode().split()[0])
@@ -37,12 +37,12 @@ def parse_data(json_file,original_bam_fn,deduped_bam_fn,sample_name):
             elif i == 6:
                 mapped = int(line.decode().split()[0])
                 print(mapped)
-        
+
         return (mapped,total_reads)
 
     original_mapped_read_count,original_read_count = bam_read_count(original_bam_fn)
     deduped_mapped_read_count, deduped_read_count = bam_read_count(deduped_bam_fn)
-    
+
 
     # Get before_filtering and after_filtering as separate dictionaries
     before_filtering = data["summary"]["before_filtering"]
@@ -80,8 +80,7 @@ if __name__ == "__main__":
     parser.add_argument('--json_file', help='The JSON file to be parsed.')
     parser.add_argument('--original_bam_file', help='The original BAM file to be parsed.')
     parser.add_argument('--deduped_bam_file', help='The deduped BAM file to be parsed.')
-    parser.add_argument('--fastq_dir', help='The directory containing the FASTQ files.')
-    parser.add_argument('--sample_name', help='The directory containing the FASTQ files.')
+    parser.add_argument('--sample_name', help='Sample name')
     args = parser.parse_args()
-    
+
     parse_data(args.json_file, args.original_bam_file, args.deduped_bam_file, args.sample_name)

@@ -15,9 +15,6 @@ import psycopg2
 
 def extract_reads(target_info, bam_file, window, sample_name):
 
-    # Specify the directory path
-    fastq_dir = f'{sample_name}_extracted_reads'
-
     # Open the BAM file
     bam = pysam.AlignmentFile(bam_file, "rb")
 
@@ -36,11 +33,11 @@ def extract_reads(target_info, bam_file, window, sample_name):
 
         print('Extracting reads for ' + id + '...')
 
-        command = f'samtools view {bam_file} {chromosome}:{start}-{end} -b | samtools fastq -N - > {id}.fastq'
+        command = f'samtools view {bam_file} {chromosome}:{start}-{end} -b | samtools fastq -N - > {sample_name}_{id}.fastq'
         subprocess.run(command, shell=True)
 
         # Count the number of reads in the fastq file using Biopython's SeqIO
-        count = sum(1 for _ in SeqIO.parse(f'{id}.fastq', 'fastq'))
+        count = sum(1 for _ in SeqIO.parse(f'{sample_name}_{id}.fastq', 'fastq'))
         read_counts[id] = count
 
     bam.close()
