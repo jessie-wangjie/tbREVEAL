@@ -162,7 +162,7 @@ process EXTRACT_TARGET_READS {
         tuple val(sample_name), val(group), path(bam_file), path(bam_file_index)
     output:
         val sample_name, emit: sample_name
-        path("${sample_name}_extracted_reads"), emit: extracted_reads_dir
+        path("*.fastq"), emit: extracted_reads_dir
         path("${sample_name}_read_counts_per_site.csv"), emit: read_counts_per_site_file
 
     script:
@@ -178,7 +178,7 @@ process GENERATE_AMPLICONS {
         path target_info
         val(sample_name)
     output:
-        path "amplicons"
+        path "*.fasta"
     script:
     """
     create_amplicon_files.py --target_info ${target_info}
