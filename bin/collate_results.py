@@ -8,11 +8,22 @@ from openpyxl.styles import Border, Side
 import numpy as np
 
 def count_fastq_reads(directory):
-    total_lines = 0
+    read_headers = set()  # Use a set to store read headers because it automatically handles duplicates
+    total_reads = 0
+
     for file_path in directory:
-        with open(file_path, 'r') as file:
-            total_lines += sum(1 for line in file)
-    return total_lines // 4  # divide by 4 as each read in a fastq file is represented by 4 lines
+        if file_path.endswith('.fastq'):  # Ensures that we're only processing FASTQ files
+            with open(file_path, 'r') as file:
+                for line in file:
+                    if line.startswith('@'):  # FASTQ read headers typically start with '@'
+                        if line not in read_headers:
+                            read_headers.add(line)
+                            total_reads += 1
+                        # Skip the next three lines as they are part of the current read
+                        next(file)
+                        next(file)
+                        next(file)
+    return total_reads
 
 def collate_integration_files(project_info, integration_stats_filenames, project_name, collapse_condition):
 
@@ -227,7 +238,7 @@ def collate_qc_files(project_info,qc_filenames, extracted_reads_dirs, excel_file
         collated_indel_df.loc["reads near probe", sample_name] = reads_near_probe
 
         # Add "reads near probe %" row
-        deduped_reads = float(collated_indel_df.loc["deduped_reads", sample_name])
+        deduped_reads = float(collated_indel_df.loc["deduped reads", sample_name])
         collated_indel_df.loc["reads near probe %", sample_name] = round(reads_near_probe / deduped_reads * 100,2)  # as a percentage
 
     # Append the collated dataframe as a new sheet to the existing Excel file

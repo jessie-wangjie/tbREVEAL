@@ -22,7 +22,6 @@ def create_amplicon_files(target_info,exist_ok=True):
         attR_amplicon = row['attR']
         beacon_amplicon = row['beacon']
         wt_amplicon = row['wt']
-        print(row['id'], beacon_amplicon)
         if 'CAS' in row['id']:
             records = [
                 SeqRecord(Seq(attL_amplicon), id="attL_amplicon", description=""),

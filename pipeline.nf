@@ -19,7 +19,6 @@ params.notebook_template = '/data/tbHCA/bin/report_generation.ipynb'
 
 process ADAPTER_AND_POLY_G_TRIM {
     cache 'lenient'
-    // publishDir "${params.outdir}/${sample_name}/qc/", pattern: '*fastp.json'
     publishDir "${params.outdir}/raw_fastq/${sample_name}/", pattern: '*.fastq.gz'
     publishDir "${params.outdir}/trimmed_fastq/${sample_name}/", pattern: '*.fastq.bgz'
     publishDir "${params.outdir}/input_probe_sheet/${sample_name}/", pattern: '*.csv'
@@ -34,9 +33,8 @@ process ADAPTER_AND_POLY_G_TRIM {
         path "${R1}"
         path "${R2}"
         path "${metadata}"
-        // tuple val(sample_name), path("${sample_name}_trimmed_R1.fastq.gz"), path("${sample_name}_trimmed_R2.fastq.gz"), emit: trimmed_nonmerged_fastq
         tuple val(sample_name), val(group), path("${sample_name}_trimmed.fastq.bgz"), emit: trimmed_fastq
-        tuple val(sample_name), path("${sample_name}_fastp.json"), emit: fastp_stats
+        tuple val(sample_name), val(group), path("${sample_name}_fastp.json"), emit: fastp_stats
 
     script:
         if (umi_in_header == false) {
@@ -95,7 +93,6 @@ process ALIGN_READS {
         val umi_deduplication
 
     output:
-        val(sample_name), emit: sample_name
         tuple val(sample_name), val(group), path("${sample_name}_initial_alignment.bam"), path("${sample_name}_initial_alignment.bam.bai"), emit: original_alignment_bam
         tuple val(sample_name), val(group), path("${sample_name}_deduped_alignment.bam"), path("${sample_name}_deduped_alignment.bam.bai"), emit: deduped_alignment_bam
         path "${reference}.fai", emit: reference_fasta_fai
@@ -145,11 +142,11 @@ process GET_TARGET_INFORMATION {
         val attp_reg
         val attp_prime
     output:
-        path "target_info.csv"
+        tuple val(sample_name), val(group), path("${sample_name}_target_info.csv")
 
     script:
     """
-    get_target_info.py --metadata ${metadata_fn} --attp_reg ${attp_reg} --attp_prime ${attp_prime} --reference ${reference} --cargo ${cargo_ref}
+    get_target_info.py --metadata ${metadata_fn} --attp_reg ${attp_reg} --attp_prime ${attp_prime} --reference ${reference} --cargo ${cargo_ref} --sample_name ${sample_name}
     """
 }
 
@@ -157,13 +154,10 @@ process EXTRACT_TARGET_READS {
     cache 'lenient'
     publishDir "${params.outdir}/probe_specific_reads/${sample_name}/"
     input:
-        path target_info
-        val(sample_name)
-        tuple val(sample_name), val(group), path(bam_file), path(bam_file_index)
+        tuple val(sample_name), val(group), path(target_info), path(bam_file), path(bam_file_index)
     output:
-        val sample_name, emit: sample_name
-        path("*.fastq"), emit: extracted_reads_dir
-        path("${sample_name}_read_counts_per_site.csv"), emit: read_counts_per_site_file
+        tuple val(sample_name), val(group), path("*.fastq"), emit: extracted_reads
+        tuple val(sample_name), val(group), path("${sample_name}_read_counts_per_site.csv"), emit: read_counts_per_site_file
 
     script:
     """
@@ -175,10 +169,9 @@ process GENERATE_AMPLICONS {
     cache 'lenient'
     publishDir "${params.outdir}/generated_amplicons/${sample_name}/"
     input:
-        path target_info
-        val(sample_name)
+        tuple val(sample_name), val(group), path(target_info)
     output:
-        path "*.fasta"
+        tuple val(sample_name), val(group), path("*.fasta")
     script:
     """
     create_amplicon_files.py --target_info ${target_info}
@@ -189,36 +182,26 @@ process ALIGN_TARGET_READS {
     cache 'lenient'
     publishDir "${params.outdir}/read_to_probe_alignment/${sample_name}/", pattern:'*.bam*'
     input:
-        path target_info
-        val sample_name
-        path fastq_dir
-        path amplicon_dir
+        tuple val(sample_name), val(group), path(target_info), path(fastq_files), path(amplicon_files)
     output:
-        val sample_name, emit: sample_name
-        path("*.bam*"), emit: probe_read_alignments
+        tuple val(sample_name), val(group), path("*.bam*")
     script:
     """
-    align_extracted_reads.py --target_info ${target_info} --fastq_dir ${fastq_dir} --amplicon_dir ${amplicon_dir} --sample_name ${sample_name}
+    align_extracted_reads.py --target_info ${target_info} --fastq_files ${fastq_files} --amplicon_files ${amplicon_files} --sample_name ${sample_name}
     """
 }
 
 process MEASURE_INTEGRATION {
     cache 'lenient'
-    publishDir "${params.outdir}/integration_stats_tables/${sample_name}", pattern: '*integration_stats.csv'
+    publishDir "${params.outdir}/integration_stats_tables/${sample_name}/", pattern: '*integration_stats.csv'
     input:
-        path target_info
-        val sample_name
-        path alignment_dir
+        tuple val(sample_name), val(group), path(target_info), path(alignments)
     output:
-        val(sample_name), emit: sample_name
-        path("${sample_name}_integration_stats.csv"), emit: integration_stats_file
-        path("*_attL.fastq"), emit: attL_extracted_reads_dir ,optional: true
-        path("*_attR.fastq"), emit: attR_extracted_reads_dir, optional: true
-        path("*_beacon.fastq"), emit: beacon_extracted_reads_dir, optional: true
-        path("*_wt.fastq"), emit: wt_extracted_reads_dir, optional: true
+        tuple val(sample_name), val(group), path("${sample_name}_integration_stats.csv"), emit: integration_stats_file
+        tuple val(sample_name), val(group), path("*.fastq"), emit: edited_reads, optional: true
     script:
     """
-    compute_integration_percentage.py --target_info ${target_info} --bam ${alignment_dir} --sample_name ${sample_name}
+    compute_integration_percentage.py --target_info ${target_info} --bam ${alignments} --sample_name ${sample_name}
     """
 }
 
@@ -226,13 +209,9 @@ process GATHER_QC_INFO {
     cache 'lenient'
     publishDir "${params.outdir}/qc_info/${sample_name}/"
     input:
-        tuple val(sample_name), path(json_file)
-        tuple val(sample_name), val(group), path(original_bam_file), path(original_bam_file_index)
-        tuple val(sample_name), val(group), path(deduped_bam_file), path(deduped_bam_file_index)
-        path fastq_dir
+        tuple val(sample_name), val(group), path(json_file),path(original_bam_file), path(original_bam_file_index),path(deduped_bam_file), path(deduped_bam_file_index)
     output:
-        val(sample_name), emit: sample_name
-        path "${sample_name}_qc_summary.csv", emit: qc_summary_file
+        tuple val(sample_name), val(group), path("${sample_name}_qc_summary.csv"), emit: qc_summary_file
     script:
     """
     gather_qc_stats.py --json_file ${json_file} --sample_name ${sample_name} --original_bam_file ${original_bam_file} --deduped_bam_file ${deduped_bam_file}
@@ -247,17 +226,14 @@ process ALIGNMENT_VISUALIZATION {
     publishDir "${params.outdir}/alignment_visualizations/${sample_name}/wt_alignments/", pattern:'*wt*.html'
 
     input:
-        val sample_name
-        path amplicons
-        path bam_dir
-        path target_info
+        tuple val(sample_name), val(group), path(target_info), path(amplicons), path(probe_read_alignments), path(edited_reads)
     output:
         val(sample_name), emit: sample_name
         path("*.html"), optional: true
 
     script:
     """
-    alignment_visualization.py --bam ${bam_dir} --target_info ${target_info} --sample_name ${sample_name}
+    alignment_visualization.py --bam ${probe_read_alignments} --target_info ${target_info} --sample_name ${sample_name}
     """
 }
 
@@ -270,7 +246,7 @@ process GENERATE_REPORT {
         path integration_stats_files
         path read_counts_per_site_files
         path qc_summary_files
-        path extracted_reads_dirs
+        path extracted_reads
         val collapse_condition
         val project_name
     output:
@@ -278,7 +254,7 @@ process GENERATE_REPORT {
 
     script:
         """
-        collate_results.py --project_config_file ${project_config_file} --integration_stats_files ${integration_stats_files} --read_counts_per_site_files ${read_counts_per_site_files} --qc_summary_files ${qc_summary_files} --extracted_reads_dirs ${extracted_reads_dirs} --collapse_condition ${collapse_condition} --project_name ${project_name}
+        collate_results.py --project_config_file ${project_config_file} --integration_stats_files ${integration_stats_files} --read_counts_per_site_files ${read_counts_per_site_files} --qc_summary_files ${qc_summary_files} --extracted_reads_dirs ${extracted_reads} --collapse_condition ${collapse_condition} --project_name ${project_name}
         """
     }
 
@@ -308,52 +284,6 @@ process MULTIQC {
     script:
     """
         multiqc .
-    """
-}
-
-process MERGE_ALIGNMENTS {
-    cache 'lenient'
-    publishDir "${params.outdir}/deduped_alignments_merged_by_group/"
-    input:
-        tuple val(group), path(bam_files), path(bai_files)
-
-    output:
-        path("${group}_samples_alignment.bam*")
-
-    script:
-        """
-        samtools merge ${group}_samples_alignment.bam ${bam_files.join(' ')}
-        samtools index ${group}_samples_alignment.bam
-        """
-}
-
-process RUN_SV_CALLING {
-    cache 'lenient'
-    publishDir "${params.outdir}/sv_output/raw_vcf/"
-    input:
-        tuple val(sample_name), path(R1), path(R2)
-        path reference
-        path reference_index
-    output:
-        tuple val(sample_name), path("*dysgu_svs.vcf"), emit: sv_output
-    script:
-    """
-    minimap2 -ax sr ${reference} ${R1} ${R2} | samtools view -b - | samtools sort -@ 16 - > ${sample_name}_unmerged_reads_aligned_to_reference.bam
-    samtools index ${sample_name}_unmerged_reads_aligned_to_reference.bam
-    dysgu run --max-cov 99999 --overwrite ${reference} temp_dir ${sample_name}_unmerged_reads_aligned_to_reference.bam > ${sample_name}_dysgu_svs.vcf
-    """
-}
-
-process PARSE_SV_CALLING_OUTPUT {
-    cache 'lenient'
-    publishDir "${params.outdir}/sv_output/translocation_analysis/"
-    input:
-        tuple val(sample_name), path(vcf_file)
-    output:
-        path '*translocation_info.csv'
-    script:
-    """
-    parse_manta_output.py --vcf ${vcf_file} --output_csv ${sample_name}_translocation_info.csv
     """
 }
 
@@ -484,26 +414,103 @@ workflow {
         // CREATE_PLOTS(report_excel_file.excel_output)
 
     } else {
-        // run these two when fastq input
+        // run when fastq input
+
+        // *** GET PROBE INFO ***
         probe_information = GET_TARGET_INFORMATION(input_ch, reference_absolute_path, params.ATTP_REG, params.ATTP_PRIME)
+
+        // *** CLEAN READS ***
         trimmed_and_merged_fastq = ADAPTER_AND_POLY_G_TRIM(input_ch, params.umi_in_header, params.umi_loc, params.umi_length,params.other_fastp_params)
+
+        // *** ALIGN READS ***
         initial_alignment = ALIGN_READS(reference_absolute_path, reference_index_ch, trimmed_and_merged_fastq.trimmed_fastq, params.initial_mapper, params.umi_deduplication)
-        fastq_dir = EXTRACT_TARGET_READS(probe_information, initial_alignment.sample_name, initial_alignment.deduped_alignment_bam)
-        amplicons_dir = GENERATE_AMPLICONS(probe_information,initial_alignment.sample_name)
-        alignment_dir = ALIGN_TARGET_READS(probe_information,fastq_dir.sample_name, fastq_dir.extracted_reads_dir, amplicons_dir)
-        att_sequence_dirs = MEASURE_INTEGRATION(probe_information,alignment_dir.sample_name, alignment_dir.probe_read_alignments)
-        qc_summary = GATHER_QC_INFO(trimmed_and_merged_fastq.fastp_stats, initial_alignment.original_alignment_bam, initial_alignment.deduped_alignment_bam, fastq_dir.extracted_reads_dir)
-        ALIGNMENT_VISUALIZATION(att_sequence_dirs.sample_name, amplicons_dir, alignment_dir.probe_read_alignments, probe_information)
+
+        // ** EXTRACT PROBE READS **
+        // by: [0,1] combines the channels using sample_name,group as key
+        probe_information
+            .combine(initial_alignment.deduped_alignment_bam, by: [0,1])
+            .set{target_info_and_deduped_alignment_ch}
+        extract_target_reads_out = EXTRACT_TARGET_READS(target_info_and_deduped_alignment_ch)
+
+        // ** GENERATE AMPLICONS **
+        amplicon_files = GENERATE_AMPLICONS(probe_information)
+
+        // ** ALIGN PROBE READS TO AMPLICONS **
+        probe_information
+            .combine(extract_target_reads_out.extracted_reads, by: [0,1])
+            .combine(amplicon_files, by:[0,1])
+            .set{align_target_reads_input_ch}
+
+        align_target_reads_out = ALIGN_TARGET_READS(align_target_reads_input_ch)
+
+        // ** MEASURE INTEGRATION **
+        probe_information
+            .combine(align_target_reads_out,by:[0,1])
+            .set{measure_integration_input_ch}
+        measure_integration_out = MEASURE_INTEGRATION(measure_integration_input_ch)
+
+        // ** SUMMARIZE QC STATS **
+
+        trimmed_and_merged_fastq.fastp_stats
+            .combine(initial_alignment.original_alignment_bam,by:[0,1])
+            .combine(initial_alignment.deduped_alignment_bam,by:[0,1])
+            .set{gather_qc_info_input_ch}
+        qc_summary = GATHER_QC_INFO(gather_qc_info_input_ch)
+
+        // ** CREATE ALIGNMENT VISUALIZATION **
+
+        probe_information
+            .combine(amplicon_files,by:[0,1])
+            .combine(align_target_reads_out,by:[0,1])
+            .combine(measure_integration_out.edited_reads,by:[0,1])
+            .set{alignment_viz_input_ch}
+        ALIGNMENT_VISUALIZATION(alignment_viz_input_ch)
+
+        // ** CREATE COLLATED REPORT **
+
         def samplesheet_absolute_path = "${launchDir}/${params.samplesheet}"
-        report_excel_file = GENERATE_REPORT(samplesheet_absolute_path,att_sequence_dirs.integration_stats_file.collect(), fastq_dir.read_counts_per_site_file.collect(), qc_summary.qc_summary_file.collect(), fastq_dir.extracted_reads_dir.collect(), params.collapse_condition, params.project_name)
-        MULTIQC(trimmed_and_merged_fastq.fastp_stats
+
+        measure_integration_out.integration_stats_file
+            .collect(flat:false)
+            .flatMap{ it }
+            .map{ tuple -> tuple[2]}
+            .collect()
+            .set{integration_stats_files_ch}
+
+        extract_target_reads_out.read_counts_per_site_file
+            .collect(flat:false)
+            .flatMap{ it }
+            .map{ tuple -> tuple[2]}
+            .collect()
+            .set{read_counts_per_site_files_ch}
+
+        qc_summary.qc_summary_file
+            .collect(flat:false)
+            .flatMap{ it }
+            .map{ tuple -> tuple[2]}
+            .collect()
+            .set{qc_summary_files_ch}
+
+        extract_target_reads_out.extracted_reads
+            .collect(flat:false)
+            .flatMap{ it }
+            .map{ tuple -> tuple[2]}
+            .collect()
+            .set{extracted_reads_files_ch}
+
+        report_excel_file = GENERATE_REPORT(samplesheet_absolute_path,integration_stats_files_ch,read_counts_per_site_files_ch,qc_summary_files_ch,extracted_reads_files_ch, params.collapse_condition, params.project_name)
+
+        // ** MULTIQC REPORT **
+        trimmed_and_merged_fastq.fastp_stats
             .flatten()  // Flatten the list
             .filter { it.toString().endsWith('.json') }  // Filter out only the paths ending with .json
             .collect()
-            .ifEmpty([]))
-        initial_alignment.deduped_alignment_bam
-            .groupTuple()
-            .set { grouped_bam_files }
+            .ifEmpty([])
+            .set{multiqc_input_ch}
+        MULTIQC(multiqc_input_ch)
+
+        // ** CREATE HTML REPORT **
+
         CREATE_PYTHON_NOTEBOOK_REPORT(report_excel_file, params.notebook_template)
     }
 

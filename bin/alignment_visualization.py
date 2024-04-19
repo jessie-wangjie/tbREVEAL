@@ -18,8 +18,6 @@ def get_amplicon_sequence(amplicon_path, chr_name):
 
 def alignment_visualization(bam_dir, target_info_df, junction_type, sample_name):
 
-    reads_dir = f'{sample_name}_{junction_type}_extracted_reads'
-
     for _, row in target_info_df.iterrows():
         id = row['id']
         quant_window = row.get(f'{junction_type}_quant_window', None)
