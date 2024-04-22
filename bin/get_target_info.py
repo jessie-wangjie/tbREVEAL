@@ -17,7 +17,7 @@ def reverse_complement(seq):
     complement = {'A': 'T', 'C': 'G', 'G': 'C', 'T': 'A','N':'N'}
     return "".join(complement[base] for base in reversed(seq))
 
-def get_target_info(metadata_fn, attp_reg_seq, attp_prime_seq,reference_path,cargo_reference_path):
+def get_target_info(metadata_fn, attp_reg_seq, attp_prime_seq,reference_path,cargo_reference_path, sample_name):
 
     ids = []
     chrs = []
@@ -39,7 +39,6 @@ def get_target_info(metadata_fn, attp_reg_seq, attp_prime_seq,reference_path,car
     same_strands = []
 
     df = pd.read_csv(metadata_fn)
-    print(df)
 
     updated_records = []
 
@@ -428,7 +427,7 @@ def get_target_info(metadata_fn, attp_reg_seq, attp_prime_seq,reference_path,car
 
     df = pd.DataFrame(data)
 
-    df.to_csv('target_info.csv', index=False)
+    df.to_csv(f'{sample_name}_target_info.csv', index=False)
     return(df)
 
 if __name__ == "__main__":
@@ -441,7 +440,8 @@ if __name__ == "__main__":
     parser.add_argument("--attp_prime", required=True, type=str, help="P prime sequence")
     parser.add_argument("--reference", required=True, type=str, help="P prime sequence")
     parser.add_argument("--cargo", required=True, type=str, help="P prime sequence")
+    parser.add_argument("--sample_name", required=True, type=str, help="P prime sequence")
     # Parse the arguments
     args = parser.parse_args()
 
-    get_target_info(args.metadata, args.attp_reg, args.attp_prime, args.reference, args.cargo)
+    get_target_info(args.metadata, args.attp_reg, args.attp_prime, args.reference, args.cargo, args.sample_name)

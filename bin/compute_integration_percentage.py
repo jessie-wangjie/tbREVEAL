@@ -57,10 +57,6 @@ def has_indel_in_range(alignment, start_range, end_range):
 
 
 def compute_integration_percentage(target_info, alignment_dir, sample_name):
-    os.makedirs(f"{sample_name}_attL_extracted_reads", exist_ok=True)
-    os.makedirs(f"{sample_name}_attR_extracted_reads", exist_ok=True)
-    os.makedirs(f"{sample_name}_beacon_extracted_reads", exist_ok=True)
-    os.makedirs(f"{sample_name}_wt_extracted_reads", exist_ok=True)
 
     target_info_df = pd.read_csv(target_info)
     integration_dict = {}
@@ -201,7 +197,7 @@ def compute_integration_percentage(target_info, alignment_dir, sample_name):
         for prefix, records in [(f'{sample_name}_attL', attL_records), (f'{sample_name}_attR', attR_records),(f'{sample_name}_beacon', beacon_records),(f'{sample_name}_wt', wt_records)]:
             if records:
                 integration_side = prefix.split('_')[-1]
-                path = f"{prefix}_extracted_reads/{row['id']}_{integration_side}.fastq"
+                path = f"{row['id']}_{integration_side}.fastq"
                 SeqIO.write(records.values(), path, "fastq")
 
         counts = {k: len(v) for k, v in categories.items()}

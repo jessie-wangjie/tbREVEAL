@@ -8,18 +8,24 @@ from openpyxl.styles import Border, Side
 import numpy as np
 
 def count_fastq_reads(directory):
-    file_paths = glob.glob(os.path.join(directory, "*.fastq"))
-    total_lines = 0
-    for file_path in file_paths:
-        with open(file_path, 'r') as file:
-            total_lines += sum(1 for line in file)
-    return total_lines // 4  # divide by 4 as each read in a fastq file is represented by 4 lines
+    read_headers = set()  # Use a set to store read headers because it automatically handles duplicates
+    total_reads = 0
+
+    for file_path in directory:
+        if file_path.endswith('.fastq'):  # Ensures that we're only processing FASTQ files
+            with open(file_path, 'r') as file:
+                for line in file:
+                    if line.startswith('@'):  # FASTQ read headers typically start with '@'
+                        if line not in read_headers:
+                            read_headers.add(line)
+                            total_reads += 1
+                        # Skip the next three lines as they are part of the current read
+                        next(file)
+                        next(file)
+                        next(file)
+    return total_reads
 
 def collate_integration_files(project_info, integration_stats_filenames, project_name, collapse_condition):
-    # Directory containing the CSV files
-
-    # Get all subdirectories in base directory (i.e., sample names)
-    # sample_dirs = [d for d in os.listdir(base_dir) if os.path.isdir(os.path.join(base_dir, d))]
 
     project_info_df  = pd.read_csv(project_info)
 
@@ -212,7 +218,7 @@ def collate_qc_files(project_info,qc_filenames, extracted_reads_dirs, excel_file
 
         # Load the csv file
         qc_filepath = [i for i in qc_filenames if str(sample_name) in i][0]
-        extracted_reads_filepath = [i for i in extracted_reads_dirs if str(sample_name) in i][0]
+        extracted_reads_filepath = [i for i in extracted_reads_dirs if str(sample_name) in i]
         df = pd.read_csv(qc_filepath, header=None)
 
         # Rename columns
@@ -228,16 +234,16 @@ def collate_qc_files(project_info,qc_filenames, extracted_reads_dirs, excel_file
 
         # Add "reads near probe" row
         reads_near_probe = count_fastq_reads(extracted_reads_filepath)
+
         collated_indel_df.loc["reads near probe", sample_name] = reads_near_probe
 
         # Add "reads near probe %" row
-        deduped_reads = float(collated_indel_df.loc["deduped_reads", sample_name])
+        deduped_reads = float(collated_indel_df.loc["deduped reads", sample_name])
         collated_indel_df.loc["reads near probe %", sample_name] = round(reads_near_probe / deduped_reads * 100,2)  # as a percentage
 
     # Append the collated dataframe as a new sheet to the existing Excel file
     with pd.ExcelWriter(excel_filename, engine='openpyxl', mode='a') as writer:
         collated_indel_df.to_excel(writer, sheet_name=f"QC Summary")
-
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Combine results from all samples")

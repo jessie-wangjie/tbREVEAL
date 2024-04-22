@@ -15,16 +15,13 @@ import psycopg2
 
 def create_amplicon_files(target_info,exist_ok=True):
     # Specify the directory path
-    amplicons_dir = 'amplicons'
-    os.makedirs(amplicons_dir)
     target_info_df = pd.read_csv(target_info)
     for index, row in target_info_df.iterrows():
-        output_fasta_fn = amplicons_dir + '/' + row['id'] + '_amplicon.fasta'
+        output_fasta_fn = row['id'] + '_amplicon.fasta'
         attL_amplicon = row['attL']
         attR_amplicon = row['attR']
         beacon_amplicon = row['beacon']
         wt_amplicon = row['wt']
-        print(row['id'], beacon_amplicon)
         if 'CAS' in row['id']:
             records = [
                 SeqRecord(Seq(attL_amplicon), id="attL_amplicon", description=""),
