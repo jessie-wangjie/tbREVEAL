@@ -228,7 +228,7 @@ process ALIGNMENT_VISUALIZATION {
 
     input:
         tuple val(sample_name), val(group), path(target_info), path(amplicons), path(probe_read_alignments), path(edited_reads)
-        path bam2html_path
+        val(bam2html_path)
     output:
         val(sample_name), emit: sample_name
         path("*.html"), optional: true
@@ -295,7 +295,7 @@ process CREATE_PYTHON_NOTEBOOK_REPORT {
 
     input:
         path excel_file
-        path notebook_template
+        val notebook_template
     output:
         path 'report.html'
     script:
@@ -321,7 +321,7 @@ workflow {
          project name : ${params.project_name}
          input from   : ${params.samplesheet}
          output to    : ${params.outdir}
-         workflow directory : ${workflow.projectDir}
+         workflow directory : ${params.bam2html_path}
 
          other parameters:
          reference genome: ${params.reference}
