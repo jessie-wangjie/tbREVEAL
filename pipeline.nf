@@ -15,7 +15,8 @@ params.umi_in_header = false
 params.umi_loc = 'per_read'
 params.umi_length = 5
 params.other_fastp_params = ''
-params.notebook_template = '/data/tbHCA/bin/report_generation.ipynb'
+params.notebook_template = "${workflow.projectDir}/bin/report_generation.ipynb"
+params.bam2html_path = "${workflow.projectDir}/bin/utils/bam2html.py"
 
 process ADAPTER_AND_POLY_G_TRIM {
     cache 'lenient'
@@ -227,13 +228,14 @@ process ALIGNMENT_VISUALIZATION {
 
     input:
         tuple val(sample_name), val(group), path(target_info), path(amplicons), path(probe_read_alignments), path(edited_reads)
+        val(bam2html_path)
     output:
         val(sample_name), emit: sample_name
         path("*.html"), optional: true
 
     script:
     """
-    alignment_visualization.py --bam ${probe_read_alignments} --target_info ${target_info} --sample_name ${sample_name}
+    alignment_visualization.py --bam2html_path ${bam2html_path} --bam ${probe_read_alignments} --target_info ${target_info} --sample_name ${sample_name}
     """
 }
 
@@ -293,7 +295,7 @@ process CREATE_PYTHON_NOTEBOOK_REPORT {
 
     input:
         path excel_file
-        path notebook_template
+        val notebook_template
     output:
         path 'report.html'
     script:
@@ -319,6 +321,7 @@ workflow {
          project name : ${params.project_name}
          input from   : ${params.samplesheet}
          output to    : ${params.outdir}
+         workflow directory : ${params.bam2html_path}
 
          other parameters:
          reference genome: ${params.reference}
@@ -464,7 +467,7 @@ workflow {
             .combine(align_target_reads_out,by:[0,1])
             .combine(measure_integration_out.edited_reads,by:[0,1])
             .set{alignment_viz_input_ch}
-        ALIGNMENT_VISUALIZATION(alignment_viz_input_ch)
+        ALIGNMENT_VISUALIZATION(alignment_viz_input_ch, params.bam2html_path)
 
         // ** CREATE COLLATED REPORT **
 
