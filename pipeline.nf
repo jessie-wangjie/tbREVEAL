@@ -15,8 +15,8 @@ params.umi_in_header = false
 params.umi_loc = 'per_read'
 params.umi_length = 5
 params.other_fastp_params = ''
-params.notebook_template = "${projectDir}/bin/report_generation.ipynb"
-params.bam2html_path = "${projectDir}/bin/utils/bam2html.py"
+params.notebook_template = "${workflow.projectDir}/bin/report_generation.ipynb"
+params.bam2html_path = "${workflow.projectDir}/bin/utils/bam2html.py"
 
 process ADAPTER_AND_POLY_G_TRIM {
     cache 'lenient'
@@ -321,6 +321,7 @@ workflow {
          project name : ${params.project_name}
          input from   : ${params.samplesheet}
          output to    : ${params.outdir}
+         workflow directory : ${workflow.projectDir}
 
          other parameters:
          reference genome: ${params.reference}
