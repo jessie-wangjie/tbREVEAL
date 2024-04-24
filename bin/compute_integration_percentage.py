@@ -92,9 +92,10 @@ def compute_integration_percentage(target_info, alignment_dir, sample_name):
 
         categories = {
             'ambiguous_attL':set(), 'ambiguous_attR':set(),
-            'partial_attL': set(), 'complete_attL': set(), 'cargo_attL': set(),
-            'partial_attR': set(), 'complete_attR': set(), 'cargo_attR': set(),
-            'ambiguous_beacon': set(), 'partial_beacon': set(), 'complete_beacon': set(), 'wt': set()
+            'complete_attL': set(), 'cargo_attL': set(),
+            'complete_attR': set(), 'cargo_attR': set(),
+            'ambiguous_beacon': set(), 'partial_beacon': set(),
+            'complete_beacon': set(), 'wt': set()
         }
 
         indel_counter = 0
@@ -201,17 +202,17 @@ def compute_integration_percentage(target_info, alignment_dir, sample_name):
                 SeqIO.write(records.values(), path, "fastq")
 
         counts = {k: len(v) for k, v in categories.items()}
-        beacon_total = sum([counts[key] for key in ['partial_beacon', 'complete_beacon']])
-        beacon_placement_denominator = sum([counts[key] for key in ['complete_attL', 'complete_attR', 'partial_beacon', 'complete_beacon','wt']])
-        partial_total = sum([counts[key] for key in ['partial_attL', 'partial_attR', 'partial_beacon', 'wt']])
+        beacon_total = sum([counts[key] for key in ['ambiguous_beacon', 'complete_beacon']])
+        beacon_placement_denominator = sum([counts[key] for key in ['complete_attL', 'complete_attR', 'ambiguous_beacon', 'complete_beacon','wt']])
+        partial_total = sum([counts[key] for key in ['ambiguous_attL', 'ambiguous_attR', 'ambiguous_beacon', 'wt']])
         complete_P_total = sum([counts[key] for key in ['complete_attL', 'complete_attR', 'complete_beacon', 'wt']])
         cargo_P_total = sum([counts[key] for key in ['cargo_attL', 'cargo_attR', 'complete_beacon', 'wt']])
 
-        partial_att_max = max(counts['partial_attL'],counts['partial_attR'])
+        partial_att_max = max(counts['ambiguous_attL'],counts['ambiguous_attR'])
         complete_att_max = max(counts['complete_attL'],counts['complete_attR'])
         cargo_att_max = max(counts['cargo_attL'],counts['cargo_attR'])
         complete_beacon_total = counts['complete_beacon']
-        partial_beacon_total = counts['partial_beacon']
+        partial_beacon_total = counts['ambiguous_beacon']
         wt_total = counts['wt']
 
         total_conversion_percentage = 0
@@ -244,10 +245,10 @@ def compute_integration_percentage(target_info, alignment_dir, sample_name):
 
         integration_dict[row['id']] = (
             counts['wt'],
-            counts['partial_attL'],
+            counts['ambiguous_attL'],
             counts['complete_attL'],
             counts['cargo_attL'],
-            counts['partial_attR'],
+            counts['ambiguous_attR'],
             counts['complete_attR'],
             counts['cargo_attR'],
             counts['partial_beacon'],
