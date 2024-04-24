@@ -129,7 +129,7 @@ def compute_integration_percentage(target_info, alignment_dir, sample_name):
                     (read.reference_name == 'attL_amplicon' and 'CAS' in row['id'] and alignment_start <= 33 and alignment_end >= 79 and p_prime_sequence in seq,
                      ['complete_attL', 'cargo_attL']),
 
-                    (read.reference_name == 'attR_amplicon' and 'CAS' in row['id'] and (alignment_start > 21 and (alignment_start < 46 or alignment_end < 57)),
+                    (read.reference_name == 'attR_amplicon' and 'CAS' in row['id'] and ((alignment_start > 21 and alignment_start < 46) or alignment_end < 57),
                      ['ambiguous_attR']),
                     (read.reference_name == 'attR_amplicon' and 'CAS' in row['id'] and alignment_start <= 21 and alignment_end >= 57 and p_reg_sequence in seq,
                      ['complete_attR']),
@@ -150,7 +150,7 @@ def compute_integration_percentage(target_info, alignment_dir, sample_name):
                     (read.reference_name == 'attL_amplicon' and 'AA' in row['id'] and (alignment_start <= 29 and alignment_end >= 75) and p_prime_sequence in seq,
                      ['complete_attL', 'cargo_attL']),
 
-                    (read.reference_name == 'attR_amplicon' and 'AA' in row['id'] and (alignment_start < 21 and (alignment_start < 46 or alignment_end < 57)),
+                    (read.reference_name == 'attR_amplicon' and 'AA' in row['id'] and ((alignment_start < 21 and alignment_start < 46) or alignment_end < 57),
                      ['ambiguous_attR']),
                     (read.reference_name == 'attR_amplicon' and 'AA' in row['id'] and (alignment_start >= 21 and alignment_end >= 57) and p_reg_sequence in seq,
                      ['complete_attR']),
