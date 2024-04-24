@@ -17,7 +17,7 @@ def reverse_complement(seq):
     complement = {'A': 'T', 'C': 'G', 'G': 'C', 'T': 'A','N':'N'}
     return "".join(complement[base] for base in reversed(seq))
 
-def get_target_info(metadata_fn, attp_reg_seq, attp_prime_seq,reference_path,cargo_reference_path, sample_name):
+def get_target_info(metadata_fn, cosmic_info,attp_reg_seq, attp_prime_seq,reference_path,cargo_reference_path, sample_name):
 
     ids = []
     chrs = []
@@ -426,9 +426,18 @@ def get_target_info(metadata_fn, attp_reg_seq, attp_prime_seq,reference_path,car
     }
 
     df = pd.DataFrame(data)
+    cosmic_info_df = pd.read_csv(cosmic_info,sep=',')
 
-    df.to_csv(f'{sample_name}_target_info.csv', index=False)
-    return(df)
+    cosmic_info_df = cosmic_info_df[['Gene Symbol','Role in Cancer']]
+
+    final_df = pd.merge(df,cosmic_info_df,left_on='gene_name',right_on='Gene Symbol',how='left')
+
+    final_df['Cosmic Gene'] = final_df['Role in Cancer'].apply(lambda x: 'No' if pd.isna(x) else 'Yes')
+
+    final_df = final_df.drop('Gene Symbol', axis=1)
+
+    final_df.to_csv(f'{sample_name}_target_info.csv', index=False)
+    return(final_df)
 
 if __name__ == "__main__":
     # Create the parser
@@ -436,6 +445,7 @@ if __name__ == "__main__":
 
     # Add the arguments
     parser.add_argument("--metadata", required=True, type=str, help="Metadata file")
+    parser.add_argument("--cosmic_info", required=True, type=str, help="COSMIC info")
     parser.add_argument("--attp_reg", required=True, type=str, help="P sequence")
     parser.add_argument("--attp_prime", required=True, type=str, help="P prime sequence")
     parser.add_argument("--reference", required=True, type=str, help="P prime sequence")
@@ -444,4 +454,4 @@ if __name__ == "__main__":
     # Parse the arguments
     args = parser.parse_args()
 
-    get_target_info(args.metadata, args.attp_reg, args.attp_prime, args.reference, args.cargo, args.sample_name)
+    get_target_info(args.metadata, args.cosmic_info, args.attp_reg, args.attp_prime, args.reference, args.cargo, args.sample_name)
