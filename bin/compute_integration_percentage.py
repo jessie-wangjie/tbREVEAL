@@ -92,9 +92,10 @@ def compute_integration_percentage(target_info, alignment_dir, sample_name):
 
         categories = {
             'ambiguous_attL':set(), 'ambiguous_attR':set(),
-            'partial_attL': set(), 'complete_attL': set(), 'cargo_attL': set(),
-            'partial_attR': set(), 'complete_attR': set(), 'cargo_attR': set(),
-            'ambiguous_beacon': set(), 'partial_beacon': set(), 'complete_beacon': set(), 'wt': set()
+            'complete_attL': set(), 'cargo_attL': set(),
+            'complete_attR': set(), 'cargo_attR': set(),
+            'ambiguous_beacon': set(), 'partial_beacon': set(),
+            'complete_beacon': set(), 'wt': set()
         }
 
         indel_counter = 0
@@ -121,46 +122,46 @@ def compute_integration_percentage(target_info, alignment_dir, sample_name):
 
 
                 rules = [
-                    (read.reference_name == 'attL_amplicon' and 'CAS' in row['id'] and alignment_start < 32 and alignment_end > 54,
+                    (read.reference_name == 'attL_amplicon' and 'CAS' in row['id'] and (alignment_start > 33 or 44 < alignment_end < 69),
                      ['ambiguous_attL']),
-                    (read.reference_name == 'attL_amplicon' and 'CAS' in row['id'] and alignment_start < 32 and alignment_end > 69 and p_prime_sequence in seq,
+                    (read.reference_name == 'attL_amplicon' and 'CAS' in row['id'] and alignment_start <= 33 and alignment_end >= 69 and p_prime_sequence in seq,
                      ['complete_attL']),
-                    (read.reference_name == 'attL_amplicon' and 'CAS' in row['id'] and alignment_start < 32 and alignment_end > 79 and p_prime_sequence in seq,
+                    (read.reference_name == 'attL_amplicon' and 'CAS' in row['id'] and alignment_start <= 33 and alignment_end >= 79 and p_prime_sequence in seq,
                      ['complete_attL', 'cargo_attL']),
 
-                    (read.reference_name == 'attR_amplicon' and 'CAS' in row['id'] and alignment_start < 30 and alignment_end > 57,
+                    (read.reference_name == 'attR_amplicon' and 'CAS' in row['id'] and (21 < alignment_start < 46 or alignment_end < 57),
                      ['ambiguous_attR']),
-                    (read.reference_name == 'attR_amplicon' and 'CAS' in row['id'] and alignment_start < 20 and alignment_end > 57 and p_reg_sequence in seq,
+                    (read.reference_name == 'attR_amplicon' and 'CAS' in row['id'] and alignment_start <= 21 and alignment_end >= 57 and p_reg_sequence in seq,
                      ['complete_attR']),
-                    (read.reference_name == 'attR_amplicon' and 'CAS' in row['id'] and alignment_start < 10 and alignment_end > 57 and p_reg_sequence in seq,
+                    (read.reference_name == 'attR_amplicon' and 'CAS' in row['id'] and alignment_start <= 11 and alignment_end >= 57 and p_reg_sequence in seq,
                      ['complete_attR', 'cargo_attR']),
 
-                    (read.reference_name == 'beacon_amplicon' and 'CAS' in row['id'] and alignment_start > 21 or alignment_end < (21 + len(full_attb_sequence)),
+                    (read.reference_name == 'beacon_amplicon' and 'CAS' in row['id'] and (alignment_start > 21 or alignment_end < (21 + len(full_attb_sequence))),
                      ['ambiguous_beacon']),
                     (read.reference_name == 'beacon_amplicon' and 'CAS' in row['id'] and alignment_start <= 21 and alignment_end >= (21 + len(full_attb_sequence)),
                      ['complete_beacon']),
 
                     # slightly different rule compared to CAS sites because cryptic B based on 46 bp attB and the beacon written is 38 bp
                     # note the difference in alignment ends (15 bp versus 11 bp)
-                    (read.reference_name == 'attL_amplicon' and 'AA' in row['id'] and alignment_start < 12 and alignment_end > 34,
+                    (read.reference_name == 'attL_amplicon' and 'AA' in row['id'] and (alignment_start > 29 or 40 < alignment_end < 65),
                      ['ambiguous_attL']),
-                    (read.reference_name == 'attL_amplicon' and 'AA' in row['id'] and alignment_start < 12 and alignment_end > 45 and p_prime_sequence in seq,
+                    (read.reference_name == 'attL_amplicon' and 'AA' in row['id'] and (alignment_start <= 29 and alignment_end >= 65) and p_prime_sequence in seq,
                      ['complete_attL']),
-                    (read.reference_name == 'attL_amplicon' and 'AA' in row['id'] and alignment_start < 12 and alignment_end > 55 and p_prime_sequence in seq,
+                    (read.reference_name == 'attL_amplicon' and 'AA' in row['id'] and (alignment_start <= 29 and alignment_end >= 75) and p_prime_sequence in seq,
                      ['complete_attL', 'cargo_attL']),
 
-                    (read.reference_name == 'attR_amplicon' and 'AA' in row['id'] and alignment_start < 30 and alignment_end > 57,
+                    (read.reference_name == 'attR_amplicon' and 'AA' in row['id'] and (21 < alignment_start < 46 or alignment_end < 57),
                      ['ambiguous_attR']),
-                    (read.reference_name == 'attR_amplicon' and 'AA' in row['id'] and alignment_start < 20 and alignment_end > 57 and p_reg_sequence in seq,
+                    (read.reference_name == 'attR_amplicon' and 'AA' in row['id'] and (alignment_start <= 21 and alignment_end >= 57) and p_reg_sequence in seq,
                      ['complete_attR']),
-                    (read.reference_name == 'attR_amplicon' and 'AA' in row['id'] and alignment_start < 10 and alignment_end > 57 and p_reg_sequence in seq,
+                    (read.reference_name == 'attR_amplicon' and 'AA' in row['id'] and (alignment_start <= 11 and alignment_end >= 57) and p_reg_sequence in seq,
                      ['complete_attR', 'cargo_attR']),
 
-                    (read.reference_name == 'beacon_amplicon' and 'AA' in row['id'] and alignment_start > 21 or alignment_end < (21 + len(full_attb_sequence)),
+                    (read.reference_name == 'beacon_amplicon' and 'AA' in row['id'] and (alignment_start > 21 or alignment_end < (21 + len(full_attb_sequence))),
                      ['ambiguous_beacon']),
-                    (read.reference_name == 'beacon_amplicon' and 'AA' in row['id'] and alignment_start <= 21 and alignment_end >= (21 + len(full_attb_sequence)) and bool(re.search(full_attb_sequence, seq)) == False,
+                    (read.reference_name == 'beacon_amplicon' and 'AA' in row['id'] and (alignment_start <= 21 and alignment_end >= (21 + len(full_attb_sequence))) and bool(re.search(full_attb_sequence, seq)) == False,
                      ['partial_beacon']),
-                    (read.reference_name == 'beacon_amplicon' and 'AA' in row['id'] and alignment_start <= 21 and alignment_end >= (21 + len(full_attb_sequence)) and bool(re.search(full_attb_sequence, seq)) == True,
+                    (read.reference_name == 'beacon_amplicon' and 'AA' in row['id'] and (alignment_start <= 21 and alignment_end >= (21 + len(full_attb_sequence))) and bool(re.search(full_attb_sequence, seq)) == True,
                      ['complete_beacon']),
 
                     (read.reference_name == 'wt_amplicon', ['wt'])
@@ -201,17 +202,17 @@ def compute_integration_percentage(target_info, alignment_dir, sample_name):
                 SeqIO.write(records.values(), path, "fastq")
 
         counts = {k: len(v) for k, v in categories.items()}
-        beacon_total = sum([counts[key] for key in ['partial_beacon', 'complete_beacon']])
-        beacon_placement_denominator = sum([counts[key] for key in ['complete_attL', 'complete_attR', 'partial_beacon', 'complete_beacon','wt']])
-        partial_total = sum([counts[key] for key in ['partial_attL', 'partial_attR', 'partial_beacon', 'wt']])
+        beacon_total = sum([counts[key] for key in ['ambiguous_beacon', 'complete_beacon']])
+        beacon_placement_denominator = sum([counts[key] for key in ['complete_attL', 'complete_attR', 'ambiguous_beacon', 'complete_beacon','wt']])
+        partial_total = sum([counts[key] for key in ['ambiguous_attL', 'ambiguous_attR', 'ambiguous_beacon', 'wt']])
         complete_P_total = sum([counts[key] for key in ['complete_attL', 'complete_attR', 'complete_beacon', 'wt']])
         cargo_P_total = sum([counts[key] for key in ['cargo_attL', 'cargo_attR', 'complete_beacon', 'wt']])
 
-        partial_att_max = max(counts['partial_attL'],counts['partial_attR'])
+        partial_att_max = max(counts['ambiguous_attL'],counts['ambiguous_attR'])
         complete_att_max = max(counts['complete_attL'],counts['complete_attR'])
         cargo_att_max = max(counts['cargo_attL'],counts['cargo_attR'])
         complete_beacon_total = counts['complete_beacon']
-        partial_beacon_total = counts['partial_beacon']
+        partial_beacon_total = counts['ambiguous_beacon']
         wt_total = counts['wt']
 
         total_conversion_percentage = 0
@@ -244,10 +245,10 @@ def compute_integration_percentage(target_info, alignment_dir, sample_name):
 
         integration_dict[row['id']] = (
             counts['wt'],
-            counts['partial_attL'],
+            counts['ambiguous_attL'],
             counts['complete_attL'],
             counts['cargo_attL'],
-            counts['partial_attR'],
+            counts['ambiguous_attR'],
             counts['complete_attR'],
             counts['cargo_attR'],
             counts['partial_beacon'],
