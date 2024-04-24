@@ -122,14 +122,14 @@ def compute_integration_percentage(target_info, alignment_dir, sample_name):
 
 
                 rules = [
-                    (read.reference_name == 'attL_amplicon' and 'CAS' in row['id'] and (alignment_start > 33 or (alignment_end > 44 and alignment_end < 69)),
+                    (read.reference_name == 'attL_amplicon' and 'CAS' in row['id'] and (alignment_start > 33 or 44 < alignment_end < 69),
                      ['ambiguous_attL']),
                     (read.reference_name == 'attL_amplicon' and 'CAS' in row['id'] and alignment_start <= 33 and alignment_end >= 69 and p_prime_sequence in seq,
                      ['complete_attL']),
                     (read.reference_name == 'attL_amplicon' and 'CAS' in row['id'] and alignment_start <= 33 and alignment_end >= 79 and p_prime_sequence in seq,
                      ['complete_attL', 'cargo_attL']),
 
-                    (read.reference_name == 'attR_amplicon' and 'CAS' in row['id'] and (alignment_start > 21 and (alignment_start < 46 or alignment_end < 57)),
+                    (read.reference_name == 'attR_amplicon' and 'CAS' in row['id'] and (21 < alignment_start < 46 or alignment_end < 57),
                      ['ambiguous_attR']),
                     (read.reference_name == 'attR_amplicon' and 'CAS' in row['id'] and alignment_start <= 21 and alignment_end >= 57 and p_reg_sequence in seq,
                      ['complete_attR']),
@@ -143,16 +143,16 @@ def compute_integration_percentage(target_info, alignment_dir, sample_name):
 
                     # slightly different rule compared to CAS sites because cryptic B based on 46 bp attB and the beacon written is 38 bp
                     # note the difference in alignment ends (15 bp versus 11 bp)
-                    (read.reference_name == 'attL_amplicon' and 'AA' in row['id'] and (alignment_start > 29 or (alignment_end > 40 and alignment_end < 65)),
+                    (read.reference_name == 'attL_amplicon' and 'AA' in row['id'] and (alignment_start > 29 or 40 < alignment_end < 65),
                      ['ambiguous_attL']),
                     (read.reference_name == 'attL_amplicon' and 'AA' in row['id'] and (alignment_start <= 29 and alignment_end >= 65) and p_prime_sequence in seq,
                      ['complete_attL']),
                     (read.reference_name == 'attL_amplicon' and 'AA' in row['id'] and (alignment_start <= 29 and alignment_end >= 75) and p_prime_sequence in seq,
                      ['complete_attL', 'cargo_attL']),
 
-                    (read.reference_name == 'attR_amplicon' and 'AA' in row['id'] and (alignment_start < 21 and (alignment_start < 46 or alignment_end < 57)),
+                    (read.reference_name == 'attR_amplicon' and 'AA' in row['id'] and (21 < alignment_start < 46 or alignment_end < 57),
                      ['ambiguous_attR']),
-                    (read.reference_name == 'attR_amplicon' and 'AA' in row['id'] and (alignment_start >= 21 and alignment_end >= 57) and p_reg_sequence in seq,
+                    (read.reference_name == 'attR_amplicon' and 'AA' in row['id'] and (alignment_start <= 21 and alignment_end >= 57) and p_reg_sequence in seq,
                      ['complete_attR']),
                     (read.reference_name == 'attR_amplicon' and 'AA' in row['id'] and (alignment_start <= 11 and alignment_end >= 57) and p_reg_sequence in seq,
                      ['complete_attR', 'cargo_attR']),
@@ -261,7 +261,7 @@ def compute_integration_percentage(target_info, alignment_dir, sample_name):
             complete_beacon_percentage,
             beacon_fidelity_percentage,
             indel_percent
-        ) + tuple(row[key] for key in ['gene_name', 'gene_strand', 'gene_distance', 'same_strand', 'overlapping_feature', 'threat_tier','Cosmic Gene'])
+        ) + tuple(row[key] for key in ['gene_name', 'gene_strand', 'gene_distance', 'same_strand', 'overlapping_feature', 'threat_tier'])
     return integration_dict
 
 
@@ -270,11 +270,11 @@ def write_integration_percentage(integration_dict, sample_name):
     filename = f'{sample_name}_integration_stats.csv'
     with open(filename, 'w') as file:
         # Write the header row
-        file.write('Target,Number of WT Reads,Number of AttL Partial Reads,Number of AttL Complete Reads,Number of AttL Cargo Reads,Number of AttR Partial Reads,Number of AttR Complete Reads,Number of AttR Cargo Reads,Number of Partial Beacon Reads,Number of Complete Beacon Reads,Number of Indel Reads,Partial P Integration Percentage,Complete P Integration Percentage,Cargo and P Integration Percentage,Partial Beacon Placement,Complete Beacon Placement,Beacon Fidelity,Indels,Closest Gene Name,Gene Strand,Distance from Gene,Same Strand as Cryptic,Overlapping Feature,Threat Tier,Cosmic Gene\n')
+        file.write('Target,Number of WT Reads,Number of AttL Partial Reads,Number of AttL Complete Reads,Number of AttL Cargo Reads,Number of AttR Partial Reads,Number of AttR Complete Reads,Number of AttR Cargo Reads,Number of Partial Beacon Reads,Number of Complete Beacon Reads,Number of Indel Reads,Partial P Integration Percentage,Complete P Integration Percentage,Cargo and P Integration Percentage,Partial Beacon Placement,Complete Beacon Placement,Beacon Fidelity,Indels,Closest Gene Name,Gene Strand,Distance from Gene,Same Strand as Cryptic,Overlapping Feature,Threat Tier\n')
 
         # Write the data rows
         for key, value in integration_dict.items():
-            file.write(f'{key},{value[0]},{value[1]},{value[2]},{value[3]},{value[4]},{value[5]},{value[6]},{value[7]},{value[8]},{value[9]},{value[10]},{value[11]},{value[12]},{value[13]},{value[14]},{value[15]},{value[16]},{value[17]},{value[18]},{value[19]},{value[20]},{value[21]},{value[22]},{value[23]}\n')
+            file.write(f'{key},{value[0]},{value[1]},{value[2]},{value[3]},{value[4]},{value[5]},{value[6]},{value[7]},{value[8]},{value[9]},{value[10]},{value[11]},{value[12]},{value[13]},{value[14]},{value[15]},{value[16]},{value[17]},{value[18]},{value[19]},{value[20]},{value[21]},{value[22]}\n')
 
 
 if __name__ == "__main__":
