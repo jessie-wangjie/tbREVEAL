@@ -17,7 +17,11 @@ params.umi_length = 5
 params.other_fastp_params = ''
 params.notebook_template = "${workflow.projectDir}/bin/report_generation.ipynb"
 params.bam2html_path = "${workflow.projectDir}/bin/utils/bam2html.py"
+<<<<<<< HEAD:main.nf
 params.dinucleotides = ''
+=======
+params.cosmic_info = "/data/cryptic_prediction/data/cosmic/cancer_gene_census.csv"
+>>>>>>> c9fc38e (fixes #20 (#22)):pipeline.nf
 
 process ADAPTER_AND_POLY_G_TRIM {
     cache 'lenient'
@@ -143,12 +147,13 @@ process GET_TARGET_INFORMATION {
         path reference
         val attp_reg
         val attp_prime
+        path cosmic_info
     output:
         tuple val(sample_name), val(group), path("${sample_name}_target_info.csv")
 
     script:
     """
-    get_target_info.py --metadata ${metadata_fn} --attp_reg ${attp_reg} --attp_prime ${attp_prime} --reference ${reference} --cargo ${cargo_ref} --sample_name ${sample_name}
+    get_target_info.py --metadata ${metadata_fn} --cosmic_info ${cosmic_info} --attp_reg ${attp_reg} --attp_prime ${attp_prime} --reference ${reference} --cargo ${cargo_ref} --sample_name ${sample_name}
     """
 }
 
@@ -458,7 +463,7 @@ workflow {
         // run when fastq input
 
         // *** GET PROBE INFO ***
-        probe_information = GET_TARGET_INFORMATION(input_ch, reference_absolute_path, params.ATTP_REG, params.ATTP_PRIME)
+        probe_information = GET_TARGET_INFORMATION(input_ch, reference_absolute_path, params.ATTP_REG, params.ATTP_PRIME,params.cosmic_info)
 
         // *** CLEAN READS ***
         trimmed_and_merged_fastq = ADAPTER_AND_POLY_G_TRIM(input_ch, params.umi_in_header, params.umi_loc, params.umi_length,params.other_fastp_params)
