@@ -18,6 +18,13 @@ params.other_fastp_params = ''
 params.notebook_template = "${workflow.projectDir}/bin/report_generation.ipynb"
 params.bam2html_path = "${workflow.projectDir}/bin/utils/bam2html.py"
 params.cosmic_info = "/data/cryptic_prediction/data/cosmic/cancer_gene_census.csv"
+params.BENCHLING_WAREHOUSE_USERNAME=''
+params.BENCHLING_WAREHOUSE_PASSWORD=''
+params.BENCHLING_WAREHOUSE_URL=''
+params.BENCHLING_API_KEY=''
+params.BENCHLING_API_URL=''
+params.bucket_name=''
+params.quilt_package_name=''
 
 process ADAPTER_AND_POLY_G_TRIM {
     cache 'lenient'
@@ -144,11 +151,21 @@ process GET_TARGET_INFORMATION {
         val attp_reg
         val attp_prime
         path cosmic_info
+        val benchling_warehouse_username
+        val benchling_warehouse_password
+        val benchling_warehouse_url
+        val benchling_api_key
+        val benchling_api_url
     output:
         tuple val(sample_name), val(group), path("${sample_name}_target_info.csv")
 
     script:
     """
+    export WAREHOUSE_USERNAME='${benchling_warehouse_username}'
+    export WAREHOUSE_PASSWORD='${benchling_warehouse_password}'
+    export WAREHOUSE_URL='${benchling_warehouse_url}'
+    export API_KEY='${benchling_api_key}'
+    export API_URL='${benchling_api_url}'
     get_target_info.py --metadata ${metadata_fn} --cosmic_info ${cosmic_info} --attp_reg ${attp_reg} --attp_prime ${attp_prime} --reference ${reference} --cargo ${cargo_ref} --sample_name ${sample_name}
     """
 }
@@ -241,7 +258,6 @@ process ALIGNMENT_VISUALIZATION {
     """
 }
 
-
 process GENERATE_REPORT {
     cache 'lenient'
     publishDir "${params.outdir}"
@@ -304,6 +320,21 @@ process CREATE_PYTHON_NOTEBOOK_REPORT {
     """
     papermill ${notebook_template} report.ipynb -p results_file ${excel_file}
     jupyter nbconvert --to html --no-input report.ipynb
+    """
+}
+
+process CREATE_QUILT_PACKAGE {
+    input:
+        val output_folder
+        path notebook_report
+        val project_name
+        val bucket_name
+        val quilt_output
+    output:
+
+    script:
+    """
+    create_quilt_package.py --output_folder ${workflow.launchDir}/${output_folder} --project_name ${project_name} --bucket_name ${bucket_name} --package_name ${quilt_output}
     """
 }
 
@@ -422,7 +453,7 @@ workflow {
         // run when fastq input
 
         // *** GET PROBE INFO ***
-        probe_information = GET_TARGET_INFORMATION(input_ch, reference_absolute_path, params.ATTP_REG, params.ATTP_PRIME,params.cosmic_info)
+        probe_information = GET_TARGET_INFORMATION(input_ch, reference_absolute_path, params.ATTP_REG, params.ATTP_PRIME,params.cosmic_info,params.BENCHLING_WAREHOUSE_USERNAME,params.BENCHLING_WAREHOUSE_PASSWORD,params.BENCHLING_WAREHOUSE_URL,params.BENCHLING_API_KEY,params.BENCHLING_API_URL)
 
         // *** CLEAN READS ***
         trimmed_and_merged_fastq = ADAPTER_AND_POLY_G_TRIM(input_ch, params.umi_in_header, params.umi_loc, params.umi_length,params.other_fastp_params)
@@ -516,7 +547,9 @@ workflow {
 
         // ** CREATE HTML REPORT **
 
-        CREATE_PYTHON_NOTEBOOK_REPORT(report_excel_file, params.notebook_template)
+        html_report = CREATE_PYTHON_NOTEBOOK_REPORT(report_excel_file, params.notebook_template)
+
+        CREATE_QUILT_PACKAGE(params.outdir,html_report,params.project_name,params.bucket_name,params.quilt_package_name)
     }
 
 }
