@@ -17,7 +17,7 @@ params.umi_length = 5
 params.other_fastp_params = ''
 params.notebook_template = "${workflow.projectDir}/bin/report_generation.ipynb"
 params.bam2html_path = "${workflow.projectDir}/bin/utils/bam2html.py"
-params.cas_database = "${workflow.projectDir}/bin/CAS.cut.bed"
+params.dinucleotides = ''
 
 process ADAPTER_AND_POLY_G_TRIM {
     cache 'lenient'
@@ -314,17 +314,35 @@ process TRANSLOCATION_DETECTION {
         path reference
         tuple val(sample_name), val(group), path(target_info), path(bam_file), path(bam_file_index)
     output:
-        path '*.bnd.cas.bed'
+        tuple val(sample_name), val(group), path("*.bnd.bed"), emit: bnd
         path '*.vcf*'
     script:
     """
     delly call -g ${reference} ${bam_file} -o ${sample_name}.delly.vcf -q 0 -r 0 -c 1 -z 0 -m 0 -t DEL,INV,BND &> log
-    bcftools query ${sample_name}.delly.vcf -i 'SVTYPE=\"BND\"' -f "%CHROM\\t%POS\\t%ID\\n%CHR2\\t%POS2\\t%ID\\n" | awk -F \"\\t\" '{OFS=\"\\t\"; print \$1,\$2-1,\$2,\$3}' > ${sample_name}.bnd.bed
-    bcftools query ${sample_name}.delly.vcf -i 'SVTYPE=\"INV\" || SVTYPE=\"DEL\"' -f "%CHROM\\t%POS\\t%ID\\n%CHROM\\t%END\\t%ID\\n" | awk -F \"\\t\" '{OFS=\"\\t\"; print \$1,\$2-1,\$2,\$3}' >> ${sample_name}.bnd.bed
-    sort -k1,1 -k2,2n ${sample_name}.bnd.bed | bedtools closest -a stdin -b ${params.cas_database} -d | awk -F \"\\t\" '{OFS=\"\\t\"; if(\$11<=10 && \$11>=0) print}' > ${sample_name}.bnd.cas.bed
+    bcftools query ${sample_name}.delly.vcf -i 'SVTYPE=\"BND\"' -f "%CHROM\\t%POS\\t%CHR2\\t%POS2\\t%ID\\t%PE\\t%SR\\n" > ${sample_name}.bnd.bed
+    bcftools query ${sample_name}.delly.vcf -i 'SVTYPE=\"INV\" || SVTYPE=\"DEL\"' -f "%CHROM\\t%POS\\t%CHROM\\t%END\\t%ID\\t%PE\\t%SR\\n" >> ${sample_name}.bnd.bed
     """
 }
 
+
+process INTERSECT_CAS_DATABASE {
+    publishDir "${params.outdir}/translocation/"
+
+    input:
+        val dinucleotides
+        tuple val(sample_name), val(group), path(bnd_file)
+    output:
+        path '*.cas.bed'
+
+    script:
+    def args = dinucleotides == "" ? "": "--dinucleotides ${dinucleotides}"
+    """
+    get_cas_info.py $args | sort -k1,1 -k2,2n | bedtools groupby -g 1,2,3 -c 4,5,6 -o distinct,distinct,distinct > CAS.cut.bed
+    awk -F \"\\t\" '{OFS=\"\\t\"; print \$1,\$2-1,\$2,\$5,\$6+\$7\"\\n\"\$3,\$4-1,\$4,\$5,\$6+\$7}' ${bnd_file} | sort -k1,1 -k2,2n | bedtools closest -a stdin -b CAS.cut.bed -d | awk -F \"\\t\" '{OFS=\"\\t\"; if(\$12<=10 && \$12>=0) print}' > ${sample_name}.bnd.cas.bed
+
+
+    """
+}
 workflow {
 
     log.info """\
@@ -538,6 +556,7 @@ workflow {
 
         // ** TRANSLOCATION DETECTION **
         TRANSLOCATION_DETECTION(reference_absolute_path, target_info_and_deduped_alignment_ch)
+        INTERSECT_CAS_DATABASE(params.dinucleotides, TRANSLOCATION_DETECTION.out.bnd)
     }
 
 }
