@@ -584,19 +584,17 @@ workflow {
             .set{multiqc_input_ch}
         MULTIQC(multiqc_input_ch)
 
+        // ** TRANSLOCATION DETECTION **
+        TRANSLOCATION_DETECTION(reference_absolute_path, target_info_and_deduped_alignment_ch)
+        INTERSECT_CAS_DATABASE(params.dinucleotides, TRANSLOCATION_DETECTION.out.bnd)
+
         // ** CREATE HTML REPORT **
 
         html_report = CREATE_PYTHON_NOTEBOOK_REPORT(report_excel_file, params.notebook_template)
 
         CREATE_QUILT_PACKAGE(params.outdir,html_report,params.project_name,params.bucket_name,params.quilt_package_name)
 
-        // CREATE_PYTHON_NOTEBOOK_REPORT(report_excel_file, params.notebook_template)
-
-        // ** TRANSLOCATION DETECTION **
-        // TRANSLOCATION_DETECTION(reference_absolute_path, target_info_and_deduped_alignment_ch)
-        // INTERSECT_CAS_DATABASE(params.dinucleotides, TRANSLOCATION_DETECTION.out.bnd)
     }
-
 }
 
 workflow.onComplete {
