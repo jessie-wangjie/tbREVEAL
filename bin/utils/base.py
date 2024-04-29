@@ -1,8 +1,8 @@
 import psycopg2
 import os
-from dotenv import load_dotenv
+# from dotenv import load_dotenv
 
-load_dotenv()
+# load_dotenv()
 
 username = os.getenv('WAREHOUSE_USERNAME')
 password = os.getenv('WAREHOUSE_PASSWORD')

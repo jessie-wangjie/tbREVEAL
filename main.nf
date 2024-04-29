@@ -17,7 +17,15 @@ params.umi_length = 5
 params.other_fastp_params = ''
 params.notebook_template = "${workflow.projectDir}/bin/report_generation.ipynb"
 params.bam2html_path = "${workflow.projectDir}/bin/utils/bam2html.py"
+params.dinucleotides = ''
 params.cosmic_info = "/data/cryptic_prediction/data/cosmic/cancer_gene_census.csv"
+params.BENCHLING_WAREHOUSE_USERNAME=''
+params.BENCHLING_WAREHOUSE_PASSWORD=''
+params.BENCHLING_WAREHOUSE_URL=''
+params.BENCHLING_API_KEY=''
+params.BENCHLING_API_URL=''
+params.bucket_name=''
+params.quilt_package_name=''
 
 process ADAPTER_AND_POLY_G_TRIM {
     cache 'lenient'
@@ -102,17 +110,17 @@ process ALIGN_READS {
     script:
     def alignment_command = ""
     if (initial_mapper == "minimap2") {
-        alignment_command = "minimap2 -ax sr -t 16 ${reference_index} ${fastq} > ${sample_name}_initial_alignment.sam"
+        alignment_command = "minimap2 -ax sr -t 96 ${reference_index} ${fastq} > ${sample_name}_initial_alignment.sam"
     } else if (initial_mapper == "bwa") {
-        alignment_command = "bwa mem -t 16 ${reference} ${fastq} > ${sample_name}_initial_alignment.sam"
+        alignment_command = "bwa mem -t 96 ${reference} ${fastq} > ${sample_name}_initial_alignment.sam"
     } else {
         error "Unsupported initial_mapper: $initial_mapper"
     }
     if (umi_deduplication == true) {
         """
         $alignment_command
-        samtools view -@ 16 -b ${sample_name}_initial_alignment.sam > ${sample_name}_initial_alignment.bam
-        samtools sort -@ 16 ${sample_name}_initial_alignment.bam > ${sample_name}_initial_alignment_sorted.bam
+        samtools view -@ 96 -b ${sample_name}_initial_alignment.sam > ${sample_name}_initial_alignment.bam
+        samtools sort -@ 96 ${sample_name}_initial_alignment.bam > ${sample_name}_initial_alignment_sorted.bam
         mv ${sample_name}_initial_alignment_sorted.bam ${sample_name}_initial_alignment.bam
         samtools index ${sample_name}_initial_alignment.bam
         umi_tools dedup -I ${sample_name}_initial_alignment.bam --paired --umi-separator ":" -S ${sample_name}_deduped_alignment.bam --method unique
@@ -144,11 +152,21 @@ process GET_TARGET_INFORMATION {
         val attp_reg
         val attp_prime
         path cosmic_info
+        val benchling_warehouse_username
+        val benchling_warehouse_password
+        val benchling_warehouse_url
+        val benchling_api_key
+        val benchling_api_url
     output:
         tuple val(sample_name), val(group), path("${sample_name}_target_info.csv")
 
     script:
     """
+    export WAREHOUSE_USERNAME='${benchling_warehouse_username}'
+    export WAREHOUSE_PASSWORD='${benchling_warehouse_password}'
+    export WAREHOUSE_URL='${benchling_warehouse_url}'
+    export API_KEY='${benchling_api_key}'
+    export API_URL='${benchling_api_url}'
     get_target_info.py --metadata ${metadata_fn} --cosmic_info ${cosmic_info} --attp_reg ${attp_reg} --attp_prime ${attp_prime} --reference ${reference} --cargo ${cargo_ref} --sample_name ${sample_name}
     """
 }
@@ -241,7 +259,6 @@ process ALIGNMENT_VISUALIZATION {
     """
 }
 
-
 process GENERATE_REPORT {
     cache 'lenient'
     publishDir "${params.outdir}"
@@ -304,6 +321,59 @@ process CREATE_PYTHON_NOTEBOOK_REPORT {
     """
     papermill ${notebook_template} report.ipynb -p results_file ${excel_file}
     jupyter nbconvert --to html --no-input report.ipynb
+    """
+}
+
+process CREATE_QUILT_PACKAGE {
+    input:
+        val output_folder
+        path notebook_report
+        val project_name
+        val bucket_name
+        val quilt_output
+    output:
+
+    script:
+    """
+    create_quilt_package.py --output_folder ${workflow.launchDir}/${output_folder} --project_name ${project_name} --bucket_name ${bucket_name} --package_name ${quilt_output}
+    """
+}
+
+process TRANSLOCATION_DETECTION {
+    cache 'lenient'
+    publishDir "${params.outdir}/translocation/"
+
+    input:
+        path reference
+        tuple val(sample_name), val(group), path(target_info), path(bam_file), path(bam_file_index)
+    output:
+        tuple val(sample_name), val(group), path("*.bnd.bed"), emit: bnd
+        path '*.vcf*'
+    script:
+    """
+    delly call -g ${reference} ${bam_file} -o ${sample_name}.delly.vcf -q 0 -r 0 -c 1 -z 0 -m 0 -t DEL,INV,BND &> log
+    bcftools query ${sample_name}.delly.vcf -i 'SVTYPE=\"BND\"' -f "%CHROM\\t%POS\\t%CHR2\\t%POS2\\t%ID\\t%PE\\t%SR\\n" > ${sample_name}.bnd.bed
+    bcftools query ${sample_name}.delly.vcf -i 'SVTYPE=\"INV\" || SVTYPE=\"DEL\"' -f "%CHROM\\t%POS\\t%CHROM\\t%END\\t%ID\\t%PE\\t%SR\\n" >> ${sample_name}.bnd.bed
+    """
+}
+
+
+process INTERSECT_CAS_DATABASE {
+    publishDir "${params.outdir}/translocation/"
+
+    input:
+        val dinucleotides
+        tuple val(sample_name), val(group), path(bnd_file)
+    output:
+        path '*.cas.bed'
+
+    script:
+    def args = dinucleotides == "" ? "": "--dinucleotides ${dinucleotides}"
+    """
+    get_cas_info.py $args | sort -k1,1 -k2,2n | bedtools groupby -g 1,2,3 -c 4,5,6 -o distinct,distinct,distinct > CAS.cut.bed
+    awk -F \"\\t\" '{OFS=\"\\t\"; print \$1,\$2-1,\$2,\$5,\$6+\$7\"\\n\"\$3,\$4-1,\$4,\$5,\$6+\$7}' ${bnd_file} | sort -k1,1 -k2,2n | bedtools closest -a stdin -b CAS.cut.bed -d | awk -F \"\\t\" '{OFS=\"\\t\"; if(\$12<=10 && \$12>=0) print}' > ${sample_name}.bnd.cas.bed
+
+
     """
 }
 
@@ -422,7 +492,7 @@ workflow {
         // run when fastq input
 
         // *** GET PROBE INFO ***
-        probe_information = GET_TARGET_INFORMATION(input_ch, reference_absolute_path, params.ATTP_REG, params.ATTP_PRIME,params.cosmic_info)
+        probe_information = GET_TARGET_INFORMATION(input_ch, reference_absolute_path, params.ATTP_REG, params.ATTP_PRIME,params.cosmic_info,params.BENCHLING_WAREHOUSE_USERNAME,params.BENCHLING_WAREHOUSE_PASSWORD,params.BENCHLING_WAREHOUSE_URL,params.BENCHLING_API_KEY,params.BENCHLING_API_URL)
 
         // *** CLEAN READS ***
         trimmed_and_merged_fastq = ADAPTER_AND_POLY_G_TRIM(input_ch, params.umi_in_header, params.umi_loc, params.umi_length,params.other_fastp_params)
@@ -514,11 +584,17 @@ workflow {
             .set{multiqc_input_ch}
         MULTIQC(multiqc_input_ch)
 
+        // ** TRANSLOCATION DETECTION **
+        TRANSLOCATION_DETECTION(reference_absolute_path, target_info_and_deduped_alignment_ch)
+        INTERSECT_CAS_DATABASE(params.dinucleotides, TRANSLOCATION_DETECTION.out.bnd)
+
         // ** CREATE HTML REPORT **
 
-        CREATE_PYTHON_NOTEBOOK_REPORT(report_excel_file, params.notebook_template)
-    }
+        html_report = CREATE_PYTHON_NOTEBOOK_REPORT(report_excel_file, params.notebook_template)
 
+        CREATE_QUILT_PACKAGE(params.outdir,html_report,params.project_name,params.bucket_name,params.quilt_package_name)
+
+    }
 }
 
 workflow.onComplete {

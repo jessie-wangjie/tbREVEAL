@@ -1,17 +1,10 @@
 #!/usr/bin/env python
 
 import argparse
-import pysam
-import subprocess
+import pandas as pd
 from Bio import SeqIO
 from Bio.Seq import Seq
 from Bio.SeqRecord import SeqRecord
-from collections import defaultdict
-import pandas as pd
-from utils.base import *
-import subprocess
-import sys
-import psycopg2
 
 def create_amplicon_files(target_info,exist_ok=True):
     # Specify the directory path
