@@ -110,17 +110,17 @@ process ALIGN_READS {
     script:
     def alignment_command = ""
     if (initial_mapper == "minimap2") {
-        alignment_command = "minimap2 -ax sr -t 16 ${reference_index} ${fastq} > ${sample_name}_initial_alignment.sam"
+        alignment_command = "minimap2 -ax sr -t 96 ${reference_index} ${fastq} > ${sample_name}_initial_alignment.sam"
     } else if (initial_mapper == "bwa") {
-        alignment_command = "bwa mem -t 16 ${reference} ${fastq} > ${sample_name}_initial_alignment.sam"
+        alignment_command = "bwa mem -t 96 ${reference} ${fastq} > ${sample_name}_initial_alignment.sam"
     } else {
         error "Unsupported initial_mapper: $initial_mapper"
     }
     if (umi_deduplication == true) {
         """
         $alignment_command
-        samtools view -@ 16 -b ${sample_name}_initial_alignment.sam > ${sample_name}_initial_alignment.bam
-        samtools sort -@ 16 ${sample_name}_initial_alignment.bam > ${sample_name}_initial_alignment_sorted.bam
+        samtools view -@ 96 -b ${sample_name}_initial_alignment.sam > ${sample_name}_initial_alignment.bam
+        samtools sort -@ 96 ${sample_name}_initial_alignment.bam > ${sample_name}_initial_alignment_sorted.bam
         mv ${sample_name}_initial_alignment_sorted.bam ${sample_name}_initial_alignment.bam
         samtools index ${sample_name}_initial_alignment.bam
         umi_tools dedup -I ${sample_name}_initial_alignment.bam --paired --umi-separator ":" -S ${sample_name}_deduped_alignment.bam --method unique
