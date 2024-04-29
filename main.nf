@@ -336,6 +336,7 @@ process CREATE_QUILT_PACKAGE {
     script:
     """
     create_quilt_package.py --output_folder ${workflow.launchDir}/${output_folder} --project_name ${project_name} --bucket_name ${bucket_name} --package_name ${quilt_output}
+    """
 
 process TRANSLOCATION_DETECTION {
     cache 'lenient'
