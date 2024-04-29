@@ -345,6 +345,7 @@ process INTERSECT_CAS_DATABASE {
 
     """
 }
+
 workflow {
 
     log.info """\
