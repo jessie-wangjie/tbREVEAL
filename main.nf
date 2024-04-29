@@ -43,7 +43,7 @@ process ADAPTER_AND_POLY_G_TRIM {
         path "${R1}"
         path "${R2}"
         path "${metadata}"
-        tuple val(sample_name), val(group), path("${sample_name}_trimmed.fastq.gz"), emit: trimmed_fastq
+        tuple val(sample_name), val(group), path("${sample_name}_trimmed.fastq.bgz"), emit: trimmed_fastq
         tuple val(sample_name), val(group), path("${sample_name}_fastp.json"), emit: fastp_stats
 
     script:
@@ -51,7 +51,7 @@ process ADAPTER_AND_POLY_G_TRIM {
             """
             fastp -m -c --dont_eval_duplication --disable_adapter_trimming --low_complexity_filter ${other_fastp_params} --overlap_len_require 10 -i ${R1} -I ${R2} --merged_out ${sample_name}_trimmed.fastq.gz --include_unmerged -w 16 -g -j ${sample_name}_fastp.json -U --umi_loc=${umi_loc} --umi_len=${umi_length} --adapter_sequence AGATCGGAAGAGCACACGTCTGAACTCCAGTCA --adapter_sequence_r2 AGATCGGAAGAGCGTCGTGTAGGGAAAGAGTGT
 
-            # gunzip -c ${sample_name}_trimmed.fastq.gz | bgzip -@ 8 > ${sample_name}_trimmed.fastq.bgz
+            gunzip -c ${sample_name}_trimmed.fastq.gz | bgzip -@ 8 > ${sample_name}_trimmed.fastq.bgz
 
             # fastp --low_complexity_filter --dont_eval_duplication ${other_fastp_params} -i ${R1} -I ${R2} -o ${sample_name}_trimmed_R1.fastq.gz -O ${sample_name}_trimmed_R2.fastq.gz -w 16 -U --umi_loc=${umi_loc} --umi_len=${umi_length}
             """
@@ -59,7 +59,7 @@ process ADAPTER_AND_POLY_G_TRIM {
             """
             fastp -m -c --dont_eval_duplication --disable_adapter_trimming --low_complexity_filter ${other_fastp_params} --overlap_len_require 10 -i ${R1} -I ${R2} --merged_out ${sample_name}_trimmed.fastq.gz --include_unmerged -w 16 -g -j ${sample_name}_fastp.json --adapter_sequence AGATCGGAAGAGCACACGTCTGAACTCCAGTCA --adapter_sequence_r2 AGATCGGAAGAGCGTCGTGTAGGGAAAGAGTGT
 
-            # gunzip -c ${sample_name}_trimmed.fastq.gz | bgzip -@ 8 > ${sample_name}_trimmed.fastq.bgz
+            gunzip -c ${sample_name}_trimmed.fastq.gz | bgzip -@ 8 > ${sample_name}_trimmed.fastq.bgz
 
             # fastp --low_complexity_filter --dont_eval_duplication ${other_fastp_params} -i ${R1} -I ${R2} -o ${sample_name}_trimmed_R1.fastq.gz -O ${sample_name}_trimmed_R2.fastq.gz -w 16
             """
@@ -337,7 +337,6 @@ process CREATE_QUILT_PACKAGE {
     """
     create_quilt_package.py --output_folder ${workflow.launchDir}/${output_folder} --project_name ${project_name} --bucket_name ${bucket_name} --package_name ${quilt_output}
     """
-}
 
 process TRANSLOCATION_DETECTION {
     cache 'lenient'
@@ -356,6 +355,7 @@ process TRANSLOCATION_DETECTION {
     bcftools query ${sample_name}.delly.vcf -i 'SVTYPE=\"INV\" || SVTYPE=\"DEL\"' -f "%CHROM\\t%POS\\t%CHROM\\t%END\\t%ID\\t%PE\\t%SR\\n" >> ${sample_name}.bnd.bed
     """
 }
+
 
 process INTERSECT_CAS_DATABASE {
     publishDir "${params.outdir}/translocation/"
@@ -587,13 +587,13 @@ workflow {
 
         html_report = CREATE_PYTHON_NOTEBOOK_REPORT(report_excel_file, params.notebook_template)
 
-        // ** CREATE QUILT PACKAGE
-
         CREATE_QUILT_PACKAGE(params.outdir,html_report,params.project_name,params.bucket_name,params.quilt_package_name)
 
+        // CREATE_PYTHON_NOTEBOOK_REPORT(report_excel_file, params.notebook_template)
+
         // ** TRANSLOCATION DETECTION **
-        TRANSLOCATION_DETECTION(reference_absolute_path, target_info_and_deduped_alignment_ch)
-        INTERSECT_CAS_DATABASE(params.dinucleotides, TRANSLOCATION_DETECTION.out.bnd)
+        // TRANSLOCATION_DETECTION(reference_absolute_path, target_info_and_deduped_alignment_ch)
+        // INTERSECT_CAS_DATABASE(params.dinucleotides, TRANSLOCATION_DETECTION.out.bnd)
     }
 
 }
