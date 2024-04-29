@@ -54,7 +54,7 @@ def collate_integration_files(project_info, integration_stats_filenames, project
             df['Max Cargo Recombination'] = df[['Number of AttL Cargo Reads','Number of AttR Cargo Reads']].max(axis=1)
 
             # Define the base columns
-            base_columns = ['Target', 'Closest Gene Name', 'Gene Strand', 'Distance from Gene', 'Same Strand as Cryptic', 'Overlapping Feature', 'Threat Tier','Cosmic Gene']
+            base_columns = ['Target', 'Closest Gene Name', 'Gene Strand', 'Distance from Gene', 'Same Strand as Cryptic', 'Overlapping Feature', 'Threat Tier','Cosmic Gene','Role in Cancer']
 
             base_columns_df = df[base_columns]
             # Filter the columns based on requirements
