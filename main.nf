@@ -17,11 +17,8 @@ params.umi_length = 5
 params.other_fastp_params = ''
 params.notebook_template = "${workflow.projectDir}/bin/report_generation.ipynb"
 params.bam2html_path = "${workflow.projectDir}/bin/utils/bam2html.py"
-<<<<<<< HEAD:main.nf
 params.dinucleotides = ''
-=======
 params.cosmic_info = "/data/cryptic_prediction/data/cosmic/cancer_gene_census.csv"
->>>>>>> c9fc38e (fixes #20 (#22)):pipeline.nf
 
 process ADAPTER_AND_POLY_G_TRIM {
     cache 'lenient'
