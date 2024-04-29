@@ -8,8 +8,6 @@ import pysam
 from Bio import SeqIO
 from Bio.Seq import Seq
 from Bio.SeqRecord import SeqRecord
-from utils.base import *  # Ensure this import is necessary; otherwise, specify what you need.
-import psycopg2
 import re
 
 def has_indel_in_range(alignment, start_range, end_range):

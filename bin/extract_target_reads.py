@@ -1,17 +1,12 @@
 #!/usr/bin/env python
 
 import argparse
+import pandas as pd
 import pysam
 import subprocess
 from Bio import SeqIO
 from Bio.Seq import Seq
 from Bio.SeqRecord import SeqRecord
-from collections import defaultdict
-import pandas as pd
-from utils.base import *
-import subprocess
-import sys
-import psycopg2
 
 def extract_reads(target_info, bam_file, window, sample_name):
 

@@ -5,11 +5,6 @@ import subprocess
 import argparse
 import os
 import multiprocessing
-
-import os
-import subprocess
-
-import os
 import subprocess
 
 def align_row(args):
