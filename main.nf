@@ -17,6 +17,7 @@ params.umi_length = 5
 params.other_fastp_params = ''
 params.notebook_template = "${workflow.projectDir}/bin/report_generation.ipynb"
 params.bam2html_path = "${workflow.projectDir}/bin/utils/bam2html.py"
+params.dinucleotides = ''
 params.cosmic_info = "/data/cryptic_prediction/data/cosmic/cancer_gene_census.csv"
 params.BENCHLING_WAREHOUSE_USERNAME=''
 params.BENCHLING_WAREHOUSE_PASSWORD=''
@@ -335,6 +336,42 @@ process CREATE_QUILT_PACKAGE {
     script:
     """
     create_quilt_package.py --output_folder ${workflow.launchDir}/${output_folder} --project_name ${project_name} --bucket_name ${bucket_name} --package_name ${quilt_output}
+
+process TRANSLOCATION_DETECTION {
+    cache 'lenient'
+    publishDir "${params.outdir}/translocation/"
+
+    input:
+        path reference
+        tuple val(sample_name), val(group), path(target_info), path(bam_file), path(bam_file_index)
+    output:
+        tuple val(sample_name), val(group), path("*.bnd.bed"), emit: bnd
+        path '*.vcf*'
+    script:
+    """
+    delly call -g ${reference} ${bam_file} -o ${sample_name}.delly.vcf -q 0 -r 0 -c 1 -z 0 -m 0 -t DEL,INV,BND &> log
+    bcftools query ${sample_name}.delly.vcf -i 'SVTYPE=\"BND\"' -f "%CHROM\\t%POS\\t%CHR2\\t%POS2\\t%ID\\t%PE\\t%SR\\n" > ${sample_name}.bnd.bed
+    bcftools query ${sample_name}.delly.vcf -i 'SVTYPE=\"INV\" || SVTYPE=\"DEL\"' -f "%CHROM\\t%POS\\t%CHROM\\t%END\\t%ID\\t%PE\\t%SR\\n" >> ${sample_name}.bnd.bed
+    """
+}
+
+
+process INTERSECT_CAS_DATABASE {
+    publishDir "${params.outdir}/translocation/"
+
+    input:
+        val dinucleotides
+        tuple val(sample_name), val(group), path(bnd_file)
+    output:
+        path '*.cas.bed'
+
+    script:
+    def args = dinucleotides == "" ? "": "--dinucleotides ${dinucleotides}"
+    """
+    get_cas_info.py $args | sort -k1,1 -k2,2n | bedtools groupby -g 1,2,3 -c 4,5,6 -o distinct,distinct,distinct > CAS.cut.bed
+    awk -F \"\\t\" '{OFS=\"\\t\"; print \$1,\$2-1,\$2,\$5,\$6+\$7\"\\n\"\$3,\$4-1,\$4,\$5,\$6+\$7}' ${bnd_file} | sort -k1,1 -k2,2n | bedtools closest -a stdin -b CAS.cut.bed -d | awk -F \"\\t\" '{OFS=\"\\t\"; if(\$12<=10 && \$12>=0) print}' > ${sample_name}.bnd.cas.bed
+
+
     """
 }
 
@@ -550,6 +587,12 @@ workflow {
         html_report = CREATE_PYTHON_NOTEBOOK_REPORT(report_excel_file, params.notebook_template)
 
         CREATE_QUILT_PACKAGE(params.outdir,html_report,params.project_name,params.bucket_name,params.quilt_package_name)
+
+        CREATE_PYTHON_NOTEBOOK_REPORT(report_excel_file, params.notebook_template)
+
+        // ** TRANSLOCATION DETECTION **
+        TRANSLOCATION_DETECTION(reference_absolute_path, target_info_and_deduped_alignment_ch)
+        INTERSECT_CAS_DATABASE(params.dinucleotides, TRANSLOCATION_DETECTION.out.bnd)
     }
 
 }
