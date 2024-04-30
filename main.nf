@@ -28,9 +28,10 @@ params.bucket_name=''
 params.quilt_package_name=''
 
 process ADAPTER_AND_POLY_G_TRIM {
+    maxForks 4
     cache 'lenient'
     publishDir "${params.outdir}/raw_fastq/${sample_name}/", pattern: '*.fastq.gz'
-    publishDir "${params.outdir}/trimmed_fastq/${sample_name}/", pattern: '*.fastq.bgz'
+    publishDir "${params.outdir}/trimmed_fastq/${sample_name}/", pattern: '*trimmed*.fastq.gz'
     publishDir "${params.outdir}/input_probe_sheet/${sample_name}/", pattern: '*.csv'
 
     input:
@@ -43,7 +44,7 @@ process ADAPTER_AND_POLY_G_TRIM {
         path "${R1}"
         path "${R2}"
         path "${metadata}"
-        tuple val(sample_name), val(group), path("${sample_name}_trimmed.fastq.bgz"), emit: trimmed_fastq
+        tuple val(sample_name), val(group), path("${sample_name}_trimmed.fastq.gz"), emit: trimmed_fastq
         tuple val(sample_name), val(group), path("${sample_name}_fastp.json"), emit: fastp_stats
 
     script:
@@ -51,7 +52,7 @@ process ADAPTER_AND_POLY_G_TRIM {
             """
             fastp -m -c --dont_eval_duplication --disable_adapter_trimming --low_complexity_filter ${other_fastp_params} --overlap_len_require 10 -i ${R1} -I ${R2} --merged_out ${sample_name}_trimmed.fastq.gz --include_unmerged -w 16 -g -j ${sample_name}_fastp.json -U --umi_loc=${umi_loc} --umi_len=${umi_length} --adapter_sequence AGATCGGAAGAGCACACGTCTGAACTCCAGTCA --adapter_sequence_r2 AGATCGGAAGAGCGTCGTGTAGGGAAAGAGTGT
 
-            gunzip -c ${sample_name}_trimmed.fastq.gz | bgzip -@ 8 > ${sample_name}_trimmed.fastq.bgz
+            # gunzip -c ${sample_name}_trimmed.fastq.gz | bgzip -@ 8 > ${sample_name}_trimmed.fastq.bgz
 
             # fastp --low_complexity_filter --dont_eval_duplication ${other_fastp_params} -i ${R1} -I ${R2} -o ${sample_name}_trimmed_R1.fastq.gz -O ${sample_name}_trimmed_R2.fastq.gz -w 16 -U --umi_loc=${umi_loc} --umi_len=${umi_length}
             """
@@ -59,7 +60,7 @@ process ADAPTER_AND_POLY_G_TRIM {
             """
             fastp -m -c --dont_eval_duplication --disable_adapter_trimming --low_complexity_filter ${other_fastp_params} --overlap_len_require 10 -i ${R1} -I ${R2} --merged_out ${sample_name}_trimmed.fastq.gz --include_unmerged -w 16 -g -j ${sample_name}_fastp.json --adapter_sequence AGATCGGAAGAGCACACGTCTGAACTCCAGTCA --adapter_sequence_r2 AGATCGGAAGAGCGTCGTGTAGGGAAAGAGTGT
 
-            gunzip -c ${sample_name}_trimmed.fastq.gz | bgzip -@ 8 > ${sample_name}_trimmed.fastq.bgz
+            # gunzip -c ${sample_name}_trimmed.fastq.gz | bgzip -@ 8 > ${sample_name}_trimmed.fastq.bgz
 
             # fastp --low_complexity_filter --dont_eval_duplication ${other_fastp_params} -i ${R1} -I ${R2} -o ${sample_name}_trimmed_R1.fastq.gz -O ${sample_name}_trimmed_R2.fastq.gz -w 16
             """
@@ -110,21 +111,22 @@ process ALIGN_READS {
     script:
     def alignment_command = ""
     if (initial_mapper == "minimap2") {
-        alignment_command = "minimap2 -ax sr -t 96 ${reference_index} ${fastq} > ${sample_name}_initial_alignment.sam"
+        alignment_command = "minimap2 -ax sr -t 96 ${reference_index} ${fastq}"
     } else if (initial_mapper == "bwa") {
-        alignment_command = "bwa mem -t 96 ${reference} ${fastq} > ${sample_name}_initial_alignment.sam"
+        alignment_command = "bwa mem -t 96 ${reference} ${fastq}"
     } else {
         error "Unsupported initial_mapper: $initial_mapper"
     }
     if (umi_deduplication == true) {
         """
-        $alignment_command
-        samtools view -@ 96 -b ${sample_name}_initial_alignment.sam > ${sample_name}_initial_alignment.bam
-        samtools sort -@ 96 ${sample_name}_initial_alignment.bam > ${sample_name}_initial_alignment_sorted.bam
+        $alignment_command | sambamba view -S -t 96 -f bam -o ${sample_name}_initial_alignment.bam /dev/stdin
+        # samtools view -@ 96 -b ${sample_name}_initial_alignment.sam > ${sample_name}_initial_alignment.bam
+        sambamba sort --show-progress -t 96 -o ${sample_name}_initial_alignment_sorted.bam ${sample_name}_initial_alignment.bam
+        # samtools sort -@ 96 ${sample_name}_initial_alignment.bam > ${sample_name}_initial_alignment_sorted.bam
         mv ${sample_name}_initial_alignment_sorted.bam ${sample_name}_initial_alignment.bam
         samtools index ${sample_name}_initial_alignment.bam
         umi_tools dedup -I ${sample_name}_initial_alignment.bam --paired --umi-separator ":" -S ${sample_name}_deduped_alignment.bam --method unique
-        rm ${sample_name}_initial_alignment.sam
+        # rm ${sample_name}_initial_alignment.sam
         samtools index ${sample_name}_deduped_alignment.bam
         samtools faidx ${reference}
         """
@@ -342,7 +344,7 @@ process CREATE_QUILT_PACKAGE {
 process TRANSLOCATION_DETECTION {
     cache 'lenient'
     publishDir "${params.outdir}/translocation/"
-
+    maxForks 4
     input:
         path reference
         tuple val(sample_name), val(group), path(target_info), path(bam_file), path(bam_file_index)
