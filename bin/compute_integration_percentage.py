@@ -246,7 +246,7 @@ def compute_integration_percentage(target_info, alignment_dir, sample_name):
             counts['complete_attR'],
             counts['cargo_attR'],
             counts['ambiguous_beacon'],
-            counts['partial_beacon']
+            counts['partial_beacon'],
             counts['complete_beacon'],
             indel_counter,
             total_partial_PGI_percentage,
