@@ -30,10 +30,6 @@ def has_indel_in_range(alignment, start_range, end_range):
     for op, length in alignment.cigartuples:
         if op == 0 or op == 2 or op == 3:  # M, D, or N (skip or reference skip)
             # Before checking for indels, see if we've reached the range of interest
-            if alignment.qname == 'VH01007:20:AAFGNJVM5:1:2210:15789:36119:CACAT_GTGTC':
-                print('start range:',start_range)
-                print('ref pos:',ref_pos)
-                print('end range:',end_range)
             if ref_pos > end_range:
                 break  # Past the range of interest, stop checking
             if (op == 2 and start_range <= ref_pos <= end_range) or (op == 2 and ref_pos + length - 1 >= start_range and ref_pos <= end_range):
@@ -41,10 +37,6 @@ def has_indel_in_range(alignment, start_range, end_range):
                 return True
             ref_pos += length
         elif op == 1:  # I
-            if alignment.qname == 'VH01007:20:AAFGNJVM5:1:2210:15789:36119:CACAT_GTGTC':
-                print(start_range)
-                print(ref_pos)
-                print(end_range)
             if start_range <= ref_pos <= end_range:
                 # Insertion at the start of the range or before moving into the range
                 return True
@@ -107,7 +99,7 @@ def compute_integration_percentage(target_info, alignment_dir, sample_name):
 
         with pysam.AlignmentFile(alignment_file, "rb") as alignment:
             for read in alignment:
-                if read.flag in [2048, 2064, 4]:  # Supplementary, Secondary, or Unaligned
+                if (read.flag in [2048, 2064, 4]):  # Supplementary, Secondary, or Unaligned
                     continue
 
                 umi = get_umi(read)
@@ -122,16 +114,16 @@ def compute_integration_percentage(target_info, alignment_dir, sample_name):
                 rules = [
                     (read.reference_name == 'attL_amplicon' and 'CAS' in row['id'] and (alignment_start <= 21 and 45 <= alignment_end < 69),
                      ['ambiguous_attL']),
-                    (read.reference_name == 'attL_amplicon' and 'CAS' in row['id'] and alignment_start <= 21 and alignment_end >= 69,
+                    (read.reference_name == 'attL_amplicon' and 'CAS' in row['id'] and alignment_start <= 21 and alignment_end >= 69 and p_prime_sequence in seq,
                      ['complete_attL']),
-                    (read.reference_name == 'attL_amplicon' and 'CAS' in row['id'] and alignment_start <= 21 and alignment_end >= 79,
+                    (read.reference_name == 'attL_amplicon' and 'CAS' in row['id'] and alignment_start <= 21 and alignment_end >= 79 and p_prime_sequence in seq,
                      ['complete_attL', 'cargo_attL']),
 
                     (read.reference_name == 'attR_amplicon' and 'CAS' in row['id'] and (21 < alignment_start <= 45 and alignment_end >= 69),
                      ['ambiguous_attR']),
-                    (read.reference_name == 'attR_amplicon' and 'CAS' in row['id'] and alignment_start <= 21 and alignment_end >= 69,
+                    (read.reference_name == 'attR_amplicon' and 'CAS' in row['id'] and alignment_start <= 21 and alignment_end >= 69 and p_reg_sequence in seq,
                      ['complete_attR']),
-                    (read.reference_name == 'attR_amplicon' and 'CAS' in row['id'] and alignment_start <= 11 and alignment_end >= 69,
+                    (read.reference_name == 'attR_amplicon' and 'CAS' in row['id'] and alignment_start <= 11 and alignment_end >= 69 and p_reg_sequence in seq,
                      ['complete_attR', 'cargo_attR']),
 
                     (read.reference_name == 'beacon_amplicon' and 'CAS' in row['id'] and (21 < alignment_start <= 66 or 21 <= alignment_end < 66 or (alignment_start == 21 and alignment_end < 66) or (alignment_start > 21 and alignment_end == 66)),

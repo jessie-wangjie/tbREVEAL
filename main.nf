@@ -277,6 +277,7 @@ process GENERATE_REPORT {
 
     script:
         """
+        ulimit -s 65536
         collate_results.py --project_config_file ${project_config_file} --integration_stats_files ${integration_stats_files} --read_counts_per_site_files ${read_counts_per_site_files} --qc_summary_files ${qc_summary_files} --extracted_reads_dirs ${extracted_reads} --collapse_condition ${collapse_condition} --project_name ${project_name}
         """
     }
@@ -344,7 +345,6 @@ process CREATE_QUILT_PACKAGE {
 process TRANSLOCATION_DETECTION {
     cache 'lenient'
     publishDir "${params.outdir}/translocation/"
-    maxForks 4
     input:
         path reference
         tuple val(sample_name), val(group), path(target_info), path(bam_file), path(bam_file_index)
