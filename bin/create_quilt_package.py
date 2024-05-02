@@ -9,6 +9,7 @@ import quilt3
 import re
 import os
 import json
+import tqdm
 
 class Capturing(list):
     def __enter__(self):
@@ -52,7 +53,10 @@ if __name__ == "__main__":
     paths = print_absolute_paths(output_folder)
     for path in paths:
         quilt_path = path.split(output_folder+'/')[-1]
-        p.set(quilt_path, path)
+        try:
+            p.set(quilt_path, path)
+        except:
+            continue
 
 
     # Pushing a package to a remote registry
