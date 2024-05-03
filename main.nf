@@ -1,5 +1,6 @@
 nextflow.enable.dsl=2
 
+
 params.reference = "/data/references/hg38.fa"
 params.outdir = ""
 params.ATTP_REG = 'GTGGTTTGTCTGGTCAACCACCGCGGT'
@@ -22,73 +23,141 @@ params.cosmic_info = "/data/cryptic_prediction/data/cosmic/cancer_gene_census.cs
 params.BENCHLING_WAREHOUSE_USERNAME=''
 params.BENCHLING_WAREHOUSE_PASSWORD=''
 params.BENCHLING_WAREHOUSE_URL=''
-params.BENCHLING_API_KEY=''
+params.BENCHLING_WAREHOUSE_API_KEY=''
+params.BENCHLING_WAREHOUSE_SDK_KEY=''
 params.BENCHLING_API_URL=''
 params.bucket_name=''
 params.quilt_package_name=''
 
+params.project_id=''
+params.reads_parent_dir=''
+
+process GET_PROJECT_INFO {
+    input:
+        val project_id
+        val reads_parent_dir
+        val benchling_warehouse_username
+        val benchling_warehouse_password
+        val benchling_warehouse_url
+        val benchling_sdk_api_key
+        val benchling_api_url
+    output:
+        path('samplesheet.csv')
+    script:
+        """
+        export WAREHOUSE_USERNAME='${benchling_warehouse_username}'
+        export WAREHOUSE_PASSWORD='${benchling_warehouse_password}'
+        export WAREHOUSE_URL='${benchling_warehouse_url}'
+        export API_KEY='${benchling_sdk_api_key}'
+        export API_URL='${benchling_api_url}'
+        get_project_info.py --project_id ${project_id} --reads_parent_dir ${reads_parent_dir}
+        """
+}
+
+process DOWNLOAD_REFERENCE_GENOME {
+    input:
+        val reference_species
+    output:
+        path("*.fa"), emit: reference_fasta
+        path("*.fa.*"), emit: reference_index
+    script:
+    if (reference_species == "Human") {
+        species_reference_fasta_path = 's3://tomebfx-data/references/hg38_no_alts/hg38_no_alts.fa'
+        species_reference_amb_path = 's3://tomebfx-data/references/hg38_no_alts/hg38_no_alts.fa.amb'
+        species_reference_ann_path = 's3://tomebfx-data/references/hg38_no_alts/hg38_no_alts.fa.ann'
+        species_reference_bwt_path = 's3://tomebfx-data/references/hg38_no_alts/hg38_no_alts.fa.bwt'
+        species_reference_fai_path = 's3://tomebfx-data/references/hg38_no_alts/hg38_no_alts.fa.fai'
+        species_reference_pac_path = 's3://tomebfx-data/references/hg38_no_alts/hg38_no_alts.fa.pac'
+        species_reference_sa_path = 's3://tomebfx-data/references/hg38_no_alts/hg38_no_alts.fa.sa'
+    } else if (reference_species == "Mouse") {
+        species_reference_fasta_path = 's3://tomebfx-data/references/hg38_no_alts/hg38_no_alts.fa'
+        species_reference_amb_path = 's3://tomebfx-data/references/hg38_no_alts/hg38_no_alts.fa.amb'
+        species_reference_ann_path = 's3://tomebfx-data/references/hg38_no_alts/hg38_no_alts.fa.ann'
+        species_reference_bwt_path = 's3://tomebfx-data/references/hg38_no_alts/hg38_no_alts.fa.bwt'
+        species_reference_fai_path = 's3://tomebfx-data/references/hg38_no_alts/hg38_no_alts.fa.fai'
+        species_reference_pac_path = 's3://tomebfx-data/references/hg38_no_alts/hg38_no_alts.fa.pac'
+        species_reference_sa_path = 's3://tomebfx-data/references/hg38_no_alts/hg38_no_alts.fa.sa'
+    } else if (reference_species == "Monkey") {
+        species_reference_fasta_path = 's3://tomebfx-data/references/hg38_no_alts/hg38_no_alts.fa'
+        species_reference_amb_path = 's3://tomebfx-data/references/hg38_no_alts/hg38_no_alts.fa.amb'
+        species_reference_ann_path = 's3://tomebfx-data/references/hg38_no_alts/hg38_no_alts.fa.ann'
+        species_reference_bwt_path = 's3://tomebfx-data/references/hg38_no_alts/hg38_no_alts.fa.bwt'
+        species_reference_fai_path = 's3://tomebfx-data/references/hg38_no_alts/hg38_no_alts.fa.fai'
+        species_reference_pac_path = 's3://tomebfx-data/references/hg38_no_alts/hg38_no_alts.fa.pac'
+        species_reference_sa_path = 's3://tomebfx-data/references/hg38_no_alts/hg38_no_alts.fa.sa'
+    }
+    """
+    aws s3 cp ${species_reference_fasta_path} .
+    aws s3 cp ${species_reference_amb_path} .
+    aws s3 cp ${species_reference_ann_path} .
+    aws s3 cp ${species_reference_bwt_path} .
+    aws s3 cp ${species_reference_fai_path} .
+    aws s3 cp ${species_reference_pac_path} .
+    aws s3 cp ${species_reference_sa_path} .
+    """
+}
+
+process GET_TARGET_INFORMATION {
+    cache 'lenient'
+    publishDir "${params.outdir}/full_probe_info/${sample_name}/"
+    input:
+        tuple val(sample_name),val(species),path(R1), path(R2), val(attb_name), val(attp_name),val(umi_type),val(probes_name),val(cargo),val(group),path(reference_genome), path(reference_index1),path(reference_index2),path(reference_index3),path(reference_index4),path(reference_index5),path(reference_index6)
+        path cosmic_info
+        val benchling_warehouse_username
+        val benchling_warehouse_password
+        val benchling_warehouse_url
+        val benchling_sdk_api_key
+        val benchling_api_url
+
+    output:
+        tuple val(sample_name), val(group), path("${sample_name}_target_info.csv"), emit: target_info
+        tuple val(sample_name), val(group), path("cargo.fasta"), emit: cargo_reference
+
+    script:
+        """
+        export WAREHOUSE_USERNAME='${benchling_warehouse_username}'
+        export WAREHOUSE_PASSWORD='${benchling_warehouse_password}'
+        export WAREHOUSE_URL='${benchling_warehouse_url}'
+        export API_KEY='${benchling_sdk_api_key}'
+        export API_URL='${benchling_api_url}'
+        get_target_info.py --probes_name "${probes_name}" --cosmic_info "${cosmic_info}" --attp_name "${attp_name}" --reference "${reference_genome}" --cargo "${cargo}" --sample_name "${sample_name}"
+        """
+}
+
 process ADAPTER_AND_POLY_G_TRIM {
-    maxForks 4
     cache 'lenient'
     publishDir "${params.outdir}/raw_fastq/${sample_name}/", pattern: '*.fastq.gz'
     publishDir "${params.outdir}/trimmed_fastq/${sample_name}/", pattern: '*trimmed*.fastq.gz'
     publishDir "${params.outdir}/input_probe_sheet/${sample_name}/", pattern: '*.csv'
 
     input:
-        tuple val(sample_name), path(R1), path(R2), path(metadata), path(cargo_ref),val(group)
-        val umi_in_header
-        val umi_loc
-        val umi_length
-        val other_fastp_params
+        tuple val(sample_name),val(species),path(R1), path(R2), val(attb_name), val(attp_name),val(umi_type),val(probes_name),val(cargo),val(group)
     output:
         path "${R1}"
         path "${R2}"
-        path "${metadata}"
-        tuple val(sample_name), val(group), path("${sample_name}_trimmed.fastq.gz"), emit: trimmed_fastq
+        tuple val(sample_name), val(group), val(umi_type), path("${sample_name}_trimmed.fastq.gz"), emit: trimmed_fastq
         tuple val(sample_name), val(group), path("${sample_name}_fastp.json"), emit: fastp_stats
-
     script:
-        if (umi_in_header == false) {
-            """
-            fastp -m -c --dont_eval_duplication --disable_adapter_trimming --low_complexity_filter ${other_fastp_params} --overlap_len_require 10 -i ${R1} -I ${R2} --merged_out ${sample_name}_trimmed.fastq.gz --include_unmerged -w 16 -g -j ${sample_name}_fastp.json -U --umi_loc=${umi_loc} --umi_len=${umi_length} --adapter_sequence AGATCGGAAGAGCACACGTCTGAACTCCAGTCA --adapter_sequence_r2 AGATCGGAAGAGCGTCGTGTAGGGAAAGAGTGT
+        umi_loc = ''
+        umi_len = ''
+        umi_skip = ''
 
-            # gunzip -c ${sample_name}_trimmed.fastq.gz | bgzip -@ 8 > ${sample_name}_trimmed.fastq.bgz
-
-            # fastp --low_complexity_filter --dont_eval_duplication ${other_fastp_params} -i ${R1} -I ${R2} -o ${sample_name}_trimmed_R1.fastq.gz -O ${sample_name}_trimmed_R2.fastq.gz -w 16 -U --umi_loc=${umi_loc} --umi_len=${umi_length}
-            """
-        } else {
-            """
-            fastp -m -c --dont_eval_duplication --disable_adapter_trimming --low_complexity_filter ${other_fastp_params} --overlap_len_require 10 -i ${R1} -I ${R2} --merged_out ${sample_name}_trimmed.fastq.gz --include_unmerged -w 16 -g -j ${sample_name}_fastp.json --adapter_sequence AGATCGGAAGAGCACACGTCTGAACTCCAGTCA --adapter_sequence_r2 AGATCGGAAGAGCGTCGTGTAGGGAAAGAGTGT
-
-            # gunzip -c ${sample_name}_trimmed.fastq.gz | bgzip -@ 8 > ${sample_name}_trimmed.fastq.bgz
-
-            # fastp --low_complexity_filter --dont_eval_duplication ${other_fastp_params} -i ${R1} -I ${R2} -o ${sample_name}_trimmed_R1.fastq.gz -O ${sample_name}_trimmed_R2.fastq.gz -w 16
-            """
+        if (umi_type == "Twist") {
+            umi_loc = 'per_read'
+            umi_len = '5'
+            umi_skip = '2'
+            umi_params = "--umi_loc=${umi_loc} --umi_len=${umi_len} --umi_skip=${umi_skip}"
+        } else if (umi_type == "xGen") {
+            umi_loc = 'read1'
+            umi_len = '11'
+            umi_skip = '0'
+            umi_params = "--umi_loc=${umi_loc} --umi_len=${umi_len}"
+        } else if (umi_type == "None") {
+            umi_params = ""
         }
-    }
-
-process CREATE_REFERENCE_INDEX {
-    cache 'lenient'
-
-    input:
-        path reference
-        val mapper
-
-    output:
-        path ['*.fa.*', '*.fasta.*', '*.mmi'], emit: reference_index_files
-
-    script:
-    if (mapper == "minimap2") {
         """
-        minimap2 -x sr -d reference_index.mmi ${reference}
+        fastp -m -c --dont_eval_duplication --disable_adapter_trimming --low_complexity_filter --overlap_len_require 10 -i ${R1} -I ${R2} --merged_out ${sample_name}_trimmed.fastq.gz --include_unmerged -w 16 -g -j ${sample_name}_fastp.json -U ${umi_params} --adapter_sequence AGATCGGAAGAGCACACGTCTGAACTCCAGTCA --adapter_sequence_r2 AGATCGGAAGAGCGTCGTGTAGGGAAAGAGTGT
         """
-    } else if (mapper == "bwa") {
-        """
-        bwa index ${reference}
-        """
-    } else {
-        error "Unsupported mapper: $mapper"
-    }
 }
 
 process ALIGN_READS {
@@ -97,80 +166,58 @@ process ALIGN_READS {
     publishDir "${params.outdir}/deduped_alignments/${sample_name}/", pattern: '*_deduped_alignment.bam*'
 
     input:
-        path reference
-        path reference_index
-        tuple val(sample_name), val(group), path(fastq)
+        tuple val(sample_name), val(group), val(umi_type), path(fastq), path(genome_reference), path(reference_index1),path(reference_index2),path(reference_index3),path(reference_index4),path(reference_index5),path(reference_index6),path(cargo_reference)
         val initial_mapper
-        val umi_deduplication
-
     output:
         tuple val(sample_name), val(group), path("${sample_name}_initial_alignment.bam"), path("${sample_name}_initial_alignment.bam.bai"), emit: original_alignment_bam
         tuple val(sample_name), val(group), path("${sample_name}_deduped_alignment.bam"), path("${sample_name}_deduped_alignment.bam.bai"), emit: deduped_alignment_bam
-        path "${reference}.fai", emit: reference_fasta_fai
 
     script:
+
     def alignment_command = ""
     if (initial_mapper == "minimap2") {
-        alignment_command = "minimap2 -ax sr -t 96 ${reference_index} ${fastq}"
+        alignment_command = "minimap2 -ax sr -t 96 ${genome_reference} ${fastq}"
     } else if (initial_mapper == "bwa") {
-        alignment_command = "bwa mem -t 96 ${reference} ${fastq}"
+        alignment_command = "bwa mem -t 96 ${genome_reference} ${fastq}"
+        cargo_alignment_command = "bwa mem -t 96 ${cargo_reference}"
     } else {
         error "Unsupported initial_mapper: $initial_mapper"
     }
-    if (umi_deduplication == true) {
+    if (umi_type != "None") {
         """
         $alignment_command | sambamba view -S -t 96 -f bam -o ${sample_name}_initial_alignment.bam /dev/stdin
-        # samtools view -@ 96 -b ${sample_name}_initial_alignment.sam > ${sample_name}_initial_alignment.bam
         sambamba sort --show-progress -t 96 -o ${sample_name}_initial_alignment_sorted.bam ${sample_name}_initial_alignment.bam
-        # samtools sort -@ 96 ${sample_name}_initial_alignment.bam > ${sample_name}_initial_alignment_sorted.bam
         mv ${sample_name}_initial_alignment_sorted.bam ${sample_name}_initial_alignment.bam
+        mv ${sample_name}_initial_alignment_sorted.bam.bai ${sample_name}_initial_alignment.bam.bai
         samtools index ${sample_name}_initial_alignment.bam
-        umi_tools dedup -I ${sample_name}_initial_alignment.bam --paired --umi-separator ":" -S ${sample_name}_deduped_alignment.bam --method unique
-        # rm ${sample_name}_initial_alignment.sam
+        umi_tools dedup -I ${sample_name}_initial_alignment.bam --umi-separator ":" -S ${sample_name}_deduped_alignment.bam --method unique
         samtools index ${sample_name}_deduped_alignment.bam
-        samtools faidx ${reference}
+
+        samtools view -f 4 ${sample_name}_initial_alignment.bam | samtools bam2fq | pigz -p 8 > ${sample_name}_unaligned_reads.fastq.gz
+        bwa index ${cargo_reference}
+        $cargo_alignment_command ${sample_name}_unaligned_reads.fastq.gz | sambamba view -S -t 96 -f bam -o ${sample_name}_unaligned_reads_aligned_to_cargo.bam /dev/stdin
+        sambamba sort --show-progress -t 96 -o ${sample_name}_unaligned_reads_aligned_to_cargo_sorted.bam ${sample_name}_unaligned_reads_aligned_to_cargo.bam
+        mv ${sample_name}_unaligned_reads_aligned_to_cargo_sorted.bam ${sample_name}_unaligned_reads_aligned_to_cargo.bam
+        mv ${sample_name}_unaligned_reads_aligned_to_cargo_sorted.bam.bai ${sample_name}_unaligned_reads_aligned_to_cargo.bam.bai
+        samtools index ${sample_name}_unaligned_reads_aligned_to_cargo.bam
+        umi_tools dedup -I ${sample_name}_unaligned_reads_aligned_to_cargo.bam --umi-separator ":" -S ${sample_name}_unaligned_reads_deduped_aligned_to_cargo.bam --method unique
+        samtools index ${sample_name}_unaligned_reads_deduped_aligned_to_cargo.bam
+
+        samtools merge -o final.bam ${sample_name}_deduped_alignment.bam ${sample_name}_unaligned_reads_deduped_aligned_to_cargo.bam
+        mv final.bam ${sample_name}_deduped_alignment.bam
+        samtools index ${sample_name}_deduped_alignment.bam
         """
     } else {
         """
-        $alignment_command
-        samtools view -@ 16 -b ${sample_name}_initial_alignment.sam > ${sample_name}_initial_alignment.bam
-        samtools sort -@ 16 ${sample_name}_initial_alignment.bam > ${sample_name}_initial_alignment_sorted.bam
+        $alignment_command | sambamba view -S -t 96 -f bam -o ${sample_name}_initial_alignment.bam /dev/stdin
+        sambamba sort --show-progress -t 96 -o ${sample_name}_initial_alignment_sorted.bam ${sample_name}_initial_alignment.bam
         mv ${sample_name}_initial_alignment_sorted.bam ${sample_name}_initial_alignment.bam
         samtools index ${sample_name}_initial_alignment.bam
         cp ${sample_name}_initial_alignment.bam ${sample_name}_deduped_alignment.bam
         rm ${sample_name}_initial_alignment.sam
         samtools index ${sample_name}_deduped_alignment.bam
-        samtools faidx ${reference}
         """
     }
-}
-
-process GET_TARGET_INFORMATION {
-    cache 'lenient'
-    publishDir "${params.outdir}/full_probe_info/${sample_name}/"
-    input:
-        tuple val(sample_name), path(R1), path(R2), path(metadata_fn), path(cargo_ref),val(group)
-        path reference
-        val attp_reg
-        val attp_prime
-        path cosmic_info
-        val benchling_warehouse_username
-        val benchling_warehouse_password
-        val benchling_warehouse_url
-        val benchling_api_key
-        val benchling_api_url
-    output:
-        tuple val(sample_name), val(group), path("${sample_name}_target_info.csv")
-
-    script:
-    """
-    export WAREHOUSE_USERNAME='${benchling_warehouse_username}'
-    export WAREHOUSE_PASSWORD='${benchling_warehouse_password}'
-    export WAREHOUSE_URL='${benchling_warehouse_url}'
-    export API_KEY='${benchling_api_key}'
-    export API_URL='${benchling_api_url}'
-    get_target_info.py --metadata ${metadata_fn} --cosmic_info ${cosmic_info} --attp_reg ${attp_reg} --attp_prime ${attp_prime} --reference ${reference} --cargo ${cargo_ref} --sample_name ${sample_name}
-    """
 }
 
 process EXTRACT_TARGET_READS {
@@ -346,19 +393,19 @@ process TRANSLOCATION_DETECTION {
     cache 'lenient'
     publishDir "${params.outdir}/translocation/"
     input:
-        path reference
-        tuple val(sample_name), val(group), path(target_info), path(bam_file), path(bam_file_index)
+        tuple val(sample_name), val(group),path(target_info), path(cargo), path(bam_file), path(bam_file_index), path(reference_genome)
     output:
         tuple val(sample_name), val(group), path("*.bnd.bed"), emit: bnd
         path '*.vcf*'
     script:
     """
-    delly call -g ${reference} ${bam_file} -o ${sample_name}.delly.vcf -q 0 -r 0 -c 1 -z 0 -m 0 -t DEL,INV,BND &> log
+    cat ${reference_genome} ${cargo} > combined_genomes.fasta
+    samtools faidx combined_genomes.fasta
+    delly call -g combined_genomes.fasta ${bam_file} -o ${sample_name}.delly.vcf -q 0 -r 0 -c 1 -z 0 -m 0 -t DEL,INV,BND &> log
     bcftools query ${sample_name}.delly.vcf -i 'SVTYPE=\"BND\"' -f "%CHROM\\t%POS\\t%CHR2\\t%POS2\\t%ID\\t%PE\\t%SR\\n" > ${sample_name}.bnd.bed
     bcftools query ${sample_name}.delly.vcf -i 'SVTYPE=\"INV\" || SVTYPE=\"DEL\"' -f "%CHROM\\t%POS\\t%CHROM\\t%END\\t%ID\\t%PE\\t%SR\\n" >> ${sample_name}.bnd.bed
     """
 }
-
 
 process INTERSECT_CAS_DATABASE {
     publishDir "${params.outdir}/translocation/"
@@ -374,8 +421,6 @@ process INTERSECT_CAS_DATABASE {
     """
     get_cas_info.py $args | sort -k1,1 -k2,2n | bedtools groupby -g 1,2,3 -c 4,5,6 -o distinct,distinct,distinct > CAS.cut.bed
     awk -F \"\\t\" '{OFS=\"\\t\"; print \$1,\$2-1,\$2,\$5,\$6+\$7\"\\n\"\$3,\$4-1,\$4,\$5,\$6+\$7}' ${bnd_file} | sort -k1,1 -k2,2n | bedtools closest -a stdin -b CAS.cut.bed -d | awk -F \"\\t\" '{OFS=\"\\t\"; if(\$12<=10 && \$12>=0) print}' > ${sample_name}.bnd.cas.bed
-
-
     """
 }
 
@@ -412,203 +457,141 @@ workflow {
          """
          .stripIndent()
 
-    Channel.fromPath("${params.reference_index_location}/*.{fa,fasta,fna,mmi}.*")
-    .collect()
-    .set { reference_index_ch }
 
+    samplesheet = GET_PROJECT_INFO(params.project_id,params.reads_parent_dir,params.BENCHLING_WAREHOUSE_USERNAME,params.BENCHLING_WAREHOUSE_PASSWORD,params.BENCHLING_WAREHOUSE_URL,params.BENCHLING_API_KEY,params.BENCHLING_API_URL)
 
-    def reference_absolute_path = "${launchDir}/${params.reference}"
-
-    if (params.reference_index_location == '') {
-        create_reference_index = CREATE_REFERENCE_INDEX(reference_absolute_path, params.initial_mapper)
-        reference_index_ch = create_reference_index.reference_index_files
-    }
-
-    if (params.useBam) {
-    // Logic to handle BAM file input
-        Channel.fromPath(params.samplesheet)
-        .splitCsv(header: true, sep: ',')
-        .map { row ->
-            def bam = "${launchDir}/${row.fastq_dir}/*.bam"
-            def bam_index = "${launchDir}/${row.fastq_dir}/*.bam.bai"
-            tuple(
-                row.sample_name,
-                file(bam),
-                file(bam_index),
-                file(row.probe_list),
-                row.group
+    // Existing logic to handle FASTQ file input
+    samplesheet
+    .splitCsv(header: true, sep: ',')
+    .map { row ->
+        def r1 = "${row.reads_dir}/*R1*.fastq.gz"
+        def r2 = "${row.reads_dir}/*R2*.fastq.gz"
+        tuple(
+            row.sample_name,
+            row.species,
+            file(r1),
+            file(r2),
+            row.attb,
+            row.attp,
+            row.umi_type,
+            row.probes_name,
+            row.cargo_name,
+            row.group
         )
     }
-    .set { bam_input_ch }
-    } else {
-        // Existing logic to handle FASTQ file input
-        Channel.fromPath(params.samplesheet)
-        .splitCsv(header: true, sep: ',')
-        .map { row ->
-            def r1 = "${launchDir}/${row.fastq_dir}/*R1*.fastq.gz"
-            def r2 = "${launchDir}/${row.fastq_dir}/*R2*.fastq.gz"
-            tuple(
-                row.sample_name,
-                file(r1),
-                file(r2),
-                file(row.probe_list),
-                file(row.cargo),
-                row.group
-            )
-        }
-        .set { input_ch }
-    }
+    .set { input_ch }
 
+    input_ch.map { tuple -> tuple[1] }  // Select the second element from each tuple
+        .unique()                   // Remove duplicates to get unique items
+        .set {unique_species_ch}                     // Print the unique items
 
+    reference_genome = DOWNLOAD_REFERENCE_GENOME(unique_species_ch)
+    trimmed_and_merged_fastq = ADAPTER_AND_POLY_G_TRIM(input_ch)
 
-    if (params.useBam){
-        sample_name = bam_input_ch.map {
-           it[0]
-        }
-        bam_file = bam_input_ch.map {
-           it[1]
-        }
-        bam_index = bam_input_ch.map {
-           it[2]
-        }
-        group = bam_input_ch.map {
-           it[4]
-        }
+    input_ch
+        .combine(reference_genome.reference_fasta)
+        .combine(reference_genome.reference_index)
+        .set{probe_info_input_ch}
 
-        bam_tuple_ch = bam_input_ch.map { items ->
-            return tuple(items[0], items[4], items[1], items[2])
-        }
+    probe_information = GET_TARGET_INFORMATION(probe_info_input_ch,params.cosmic_info,params.BENCHLING_WAREHOUSE_USERNAME,params.BENCHLING_WAREHOUSE_PASSWORD,params.BENCHLING_WAREHOUSE_URL,params.BENCHLING_API_KEY,params.BENCHLING_API_URL)
 
-        probe_information = GET_TARGET_INFORMATION(bam_input_ch, reference_absolute_path, cargo_absolute_path, params.ATTP_REG, params.ATTP_PRIME)
-        fastq_dir = EXTRACT_TARGET_READS(probe_information, sample_name, bam_tuple_ch)
-        amplicons_dir = GENERATE_AMPLICONS(probe_information, sample_name)
-        alignment_dir = ALIGN_TARGET_READS(probe_information, fastq_dir.sample_name, fastq_dir.extracted_reads_dir, amplicons_dir)
-        att_sequence_dirs = MEASURE_INTEGRATION(probe_information,alignment_dir.sample_name, alignment_dir.probe_read_alignments)
-        cs2_attL_attR_dirs = ALIGNMENT_VISUALIZATION(att_sequence_dirs.sample_name, alignment_dir.probe_read_alignments, att_sequence_dirs.attL_extracted_reads_dir, att_sequence_dirs.attR_extracted_reads_dir, att_sequence_dirs.beacon_extracted_reads_dir, att_sequence_dirs.wt_extracted_reads_dir, amplicons_dir, probe_information)
+    amplicon_files = GENERATE_AMPLICONS(probe_information.target_info)
 
-        // def samplesheet_absolute_path = "${launchDir}/${params.samplesheet}"
-        // report_excel_file = GENERATE_REPORT(samplesheet_absolute_path,att_sequence_dirs.integration_stats_file.collect(), indel_tables.attL_indel_table.collect(), indel_tables.attR_indel_table.collect(), fastq_dir.read_counts_per_site_file.collect(), qc_summary.qc_summary_file.collect(), fastq_dir.extracted_reads_dir.collect(), params.collapse_condition, params.project_name)
-        // CREATE_PLOTS(report_excel_file.excel_output)
+    trimmed_and_merged_fastq.trimmed_fastq
+        .combine(reference_genome.reference_fasta)
+        .combine(reference_genome.reference_index)
+        .combine(probe_information.cargo_reference,by:[0,1])
+        .set{align_reads_input_ch}
 
-    } else {
-        // run when fastq input
+    initial_alignment = ALIGN_READS(align_reads_input_ch, params.initial_mapper)
 
-        // *** GET PROBE INFO ***
-        probe_information = GET_TARGET_INFORMATION(input_ch, reference_absolute_path, params.ATTP_REG, params.ATTP_PRIME,params.cosmic_info,params.BENCHLING_WAREHOUSE_USERNAME,params.BENCHLING_WAREHOUSE_PASSWORD,params.BENCHLING_WAREHOUSE_URL,params.BENCHLING_API_KEY,params.BENCHLING_API_URL)
+    probe_information.target_info
+        .combine(initial_alignment.deduped_alignment_bam, by: [0,1])
+        .set{target_info_and_deduped_alignment_ch}
 
-        // *** CLEAN READS ***
-        trimmed_and_merged_fastq = ADAPTER_AND_POLY_G_TRIM(input_ch, params.umi_in_header, params.umi_loc, params.umi_length,params.other_fastp_params)
+    extract_target_reads_out = EXTRACT_TARGET_READS(target_info_and_deduped_alignment_ch)
 
-        // *** ALIGN READS ***
-        initial_alignment = ALIGN_READS(reference_absolute_path, reference_index_ch, trimmed_and_merged_fastq.trimmed_fastq, params.initial_mapper, params.umi_deduplication)
+    probe_information.target_info
+        .combine(extract_target_reads_out.extracted_reads, by: [0,1])
+        .combine(amplicon_files, by:[0,1])
+        .set{align_target_reads_input_ch}
 
-        // ** EXTRACT PROBE READS **
-        // by: [0,1] combines the channels using sample_name,group as key
-        probe_information
-            .combine(initial_alignment.deduped_alignment_bam, by: [0,1])
-            .set{target_info_and_deduped_alignment_ch}
-        extract_target_reads_out = EXTRACT_TARGET_READS(target_info_and_deduped_alignment_ch)
+    align_target_reads_out = ALIGN_TARGET_READS(align_target_reads_input_ch)
 
-        // ** GENERATE AMPLICONS **
-        amplicon_files = GENERATE_AMPLICONS(probe_information)
+    probe_information.target_info
+        .combine(align_target_reads_out,by:[0,1])
+        .set{measure_integration_input_ch}
 
-        // ** ALIGN PROBE READS TO AMPLICONS **
-        probe_information
-            .combine(extract_target_reads_out.extracted_reads, by: [0,1])
-            .combine(amplicon_files, by:[0,1])
-            .set{align_target_reads_input_ch}
+    measure_integration_out = MEASURE_INTEGRATION(measure_integration_input_ch)
 
-        align_target_reads_out = ALIGN_TARGET_READS(align_target_reads_input_ch)
+    trimmed_and_merged_fastq.fastp_stats
+        .combine(initial_alignment.original_alignment_bam,by:[0,1])
+        .combine(initial_alignment.deduped_alignment_bam,by:[0,1])
+        .set{gather_qc_info_input_ch}
+    qc_summary = GATHER_QC_INFO(gather_qc_info_input_ch)
 
-        // ** MEASURE INTEGRATION **
-        probe_information
-            .combine(align_target_reads_out,by:[0,1])
-            .set{measure_integration_input_ch}
-        measure_integration_out = MEASURE_INTEGRATION(measure_integration_input_ch)
+    probe_information.target_info
+        .combine(amplicon_files,by:[0,1])
+        .combine(align_target_reads_out,by:[0,1])
+        .combine(measure_integration_out.edited_reads,by:[0,1])
+        .set{alignment_viz_input_ch}
+    ALIGNMENT_VISUALIZATION(alignment_viz_input_ch, params.bam2html_path)
 
-        // ** SUMMARIZE QC STATS **
+    measure_integration_out.integration_stats_file
+    .collect(flat:false)
+    .flatMap{ it }
+    .map{ tuple -> tuple[2] }
+    .collect()
+    .set{integration_stats_files_ch}
 
-        trimmed_and_merged_fastq.fastp_stats
-            .combine(initial_alignment.original_alignment_bam,by:[0,1])
-            .combine(initial_alignment.deduped_alignment_bam,by:[0,1])
-            .set{gather_qc_info_input_ch}
-        qc_summary = GATHER_QC_INFO(gather_qc_info_input_ch)
+    extract_target_reads_out.read_counts_per_site_file
+        .collect(flat:false)
+        .flatMap{ it }
+        .map{ tuple -> tuple[2]}
+        .collect()
+        .set{read_counts_per_site_files_ch}
 
-        // ** CREATE ALIGNMENT VISUALIZATION **
+    qc_summary.qc_summary_file
+        .collect(flat:false)
+        .flatMap{ it }
+        .map{ tuple -> tuple[2]}
+        .collect()
+        .set{qc_summary_files_ch}
 
-        probe_information
-            .combine(amplicon_files,by:[0,1])
-            .combine(align_target_reads_out,by:[0,1])
-            .combine(measure_integration_out.edited_reads,by:[0,1])
-            .set{alignment_viz_input_ch}
-        ALIGNMENT_VISUALIZATION(alignment_viz_input_ch, params.bam2html_path)
+    extract_target_reads_out.extracted_reads
+        .collect(flat:false)
+        .flatMap{ it }
+        .map{ tuple -> tuple[2]}
+        .collect()
+        .set{extracted_reads_files_ch}
 
-        // ** CREATE COLLATED REPORT **
+    report_excel_file = GENERATE_REPORT(samplesheet,integration_stats_files_ch,read_counts_per_site_files_ch,qc_summary_files_ch,extracted_reads_files_ch, params.collapse_condition, params.project_name)
 
-        def samplesheet_absolute_path = "${launchDir}/${params.samplesheet}"
+    // ** MULTIQC REPORT **
+    trimmed_and_merged_fastq.fastp_stats
+        .flatten()  // Flatten the list
+        .filter { it.toString().endsWith('.json') }  // Filter out only the paths ending with .json
+        .collect()
+        .ifEmpty([])
+        .set{multiqc_input_ch}
+    MULTIQC(multiqc_input_ch)
 
-        measure_integration_out.integration_stats_file
-            .collect(flat:false)
-            .flatMap{ it }
-            .map{ tuple -> tuple[2]}
-            .collect()
-            .set{integration_stats_files_ch}
+    // ** TRANSLOCATION DETECTION **
+    probe_information.target_info
+        .combine(probe_information.cargo_reference, by: [0,1])
+        .combine(initial_alignment.deduped_alignment_bam, by: [0,1])
+        .combine(reference_genome.reference_fasta)
+        .set{translocation_detection_input_ch}
 
-        extract_target_reads_out.read_counts_per_site_file
-            .collect(flat:false)
-            .flatMap{ it }
-            .map{ tuple -> tuple[2]}
-            .collect()
-            .set{read_counts_per_site_files_ch}
+    translocation_detection_input_ch.view()
 
-        qc_summary.qc_summary_file
-            .collect(flat:false)
-            .flatMap{ it }
-            .map{ tuple -> tuple[2]}
-            .collect()
-            .set{qc_summary_files_ch}
+    TRANSLOCATION_DETECTION(translocation_detection_input_ch)
 
-        extract_target_reads_out.extracted_reads
-            .collect(flat:false)
-            .flatMap{ it }
-            .map{ tuple -> tuple[2]}
-            .collect()
-            .set{extracted_reads_files_ch}
+    INTERSECT_CAS_DATABASE(params.dinucleotides, TRANSLOCATION_DETECTION.out.bnd)
 
-        report_excel_file = GENERATE_REPORT(samplesheet_absolute_path,integration_stats_files_ch,read_counts_per_site_files_ch,qc_summary_files_ch,extracted_reads_files_ch, params.collapse_condition, params.project_name)
+    // ** CREATE HTML REPORT **
 
-        // ** MULTIQC REPORT **
-        trimmed_and_merged_fastq.fastp_stats
-            .flatten()  // Flatten the list
-            .filter { it.toString().endsWith('.json') }  // Filter out only the paths ending with .json
-            .collect()
-            .ifEmpty([])
-            .set{multiqc_input_ch}
-        MULTIQC(multiqc_input_ch)
+    html_report = CREATE_PYTHON_NOTEBOOK_REPORT(report_excel_file, params.notebook_template)
 
-        // ** TRANSLOCATION DETECTION **
-        TRANSLOCATION_DETECTION(reference_absolute_path, target_info_and_deduped_alignment_ch)
-        INTERSECT_CAS_DATABASE(params.dinucleotides, TRANSLOCATION_DETECTION.out.bnd)
-
-        // ** CREATE HTML REPORT **
-
-        html_report = CREATE_PYTHON_NOTEBOOK_REPORT(report_excel_file, params.notebook_template)
-
-        CREATE_QUILT_PACKAGE(params.outdir,html_report,params.project_name,params.bucket_name,params.quilt_package_name)
-
-    }
-}
-
-workflow.onComplete {
-
-    def msg = """\
-        Pipeline execution summary
-        ---------------------------
-        Completed at: ${workflow.complete}
-        Duration    : ${workflow.duration}
-        Success     : ${workflow.success}
-        workDir     : ${workflow.workDir}
-        exit status : ${workflow.exitStatus}
-        """
-        .stripIndent()
+    CREATE_QUILT_PACKAGE(params.outdir,html_report,params.project_name,params.bucket_name,params.quilt_package_name)
 }

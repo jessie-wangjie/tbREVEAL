@@ -12,12 +12,73 @@ from utils.base import *
 import subprocess
 import sys
 import psycopg2
+from pathlib import Path
 
 def reverse_complement(seq):
     complement = {'A': 'T', 'C': 'G', 'G': 'C', 'T': 'A','N':'N'}
     return "".join(complement[base] for base in reversed(seq))
 
-def get_target_info(metadata_fn, cosmic_info,attp_reg_seq, attp_prime_seq,reference_path,cargo_reference_path, sample_name):
+def get_attp_info(attp):
+    attp_query = '''
+        SELECT left_half, right_half, central_dinucleotides,bases
+        FROM attachment_sequence$raw AS att_site
+        JOIN dna_sequence AS dna_sequence ON dna_sequence.id = att_site.id
+        WHERE name$ = %s
+        '''
+
+    cur.execute(attp_query, [attp])
+    attp_query_result = cur.fetchone()
+
+    attp_left_half_indices, attp_right_half_indices,central_dinucleotide,attp_bases = attp_query_result
+    attp_left_half_start_index = int(attp_left_half_indices.split(',')[0].replace('[','')) - 1
+    attp_left_half_end_index = int(attp_left_half_indices.split(',')[1].replace(']',''))
+    attp_right_half_start_index = int(attp_right_half_indices.split(',')[0].replace('[','')) - 1
+    attp_right_half_end_index = int(attp_right_half_indices.split(',')[1].replace(']',''))
+    attp_left = attp_bases[attp_left_half_start_index:attp_left_half_end_index] + central_dinucleotide
+    attp_right = attp_bases[attp_right_half_start_index:attp_right_half_end_index]
+
+    return(attp_left,attp_right)
+
+
+def download_probes_file(probes_name):
+
+    panel_query ='''
+        SELECT probes_bed_file FROM hcpanel WHERE name$ = %s
+        '''
+    cur.execute(panel_query, [probes_name])
+    probes_query_result = cur.fetchone()
+    probe_bed_file_download_blob_id = probes_query_result[0]['url'].split('/')[-1]
+    probe_bed_file_download_name = (probes_query_result[0]['name'])
+    benchling = Benchling(url="https://tome.benchling.com", auth_method=ApiKeyAuth(api_key))
+    benchling.blobs.download_file(blob_id=probe_bed_file_download_blob_id,destination_path=Path(f'probes.bed'))
+    print('Probes downloaded to probes.bed')
+
+    return('probes.bed')
+
+def download_cargo_genome(cargo_id):
+    cargo_query ='''
+    SELECT name,bases FROM dna_sequence WHERE name = %s
+    '''
+
+    cur.execute(cargo_query, [cargo_id])
+    cargo_query_result = cur.fetchone()
+    cargo_name,cargo_bases = cargo_query_result
+
+    cargo_bases = cargo_bases.upper()
+
+    seq_record = SeqRecord(Seq(cargo_bases), id = cargo_name,description='')
+
+    with open("cargo.fasta", "w") as output_handle:
+        SeqIO.write(seq_record,output_handle, 'fasta-2line')
+
+    print('Wrote cargo sequence to cargo.fasta')
+
+
+def get_target_info(cosmic_info,attp_name,reference_path,cargo_id, sample_name, probes_name):
+
+    attp_reg_seq,attp_prime_seq = get_attp_info(attp_name)
+    download_cargo_genome(cargo_id)
+    probes_fn = download_probes_file(probes_name)
 
     ids = []
     chrs = []
@@ -38,14 +99,21 @@ def get_target_info(metadata_fn, cosmic_info,attp_reg_seq, attp_prime_seq,refere
     gene_distances = []
     same_strands = []
 
-    df = pd.read_csv(metadata_fn)
+    df = pd.read_csv(probes_fn,sep='\t')
+    df.columns = ['Chromosome','Start','Stop','Target']
 
     updated_records = []
 
     for index, row in df.iterrows():
 
         id = row['Target']
-        pair_ids = row['Target'].split(';')
+        if ',' in row['Target']:
+            pair_ids = row['Target'].split(',')
+        elif ';' in row['Target']:
+            pair_ids = row['Target'].split(';')
+        else:
+            pair_ids = row['Target']
+
         for pair_id in pair_ids:
             if 'CAS' in pair_id:
                 query = '''
@@ -77,10 +145,33 @@ def get_target_info(metadata_fn, cosmic_info,attp_reg_seq, attp_prime_seq,refere
                     strand = result
                     final_record = [pair_id,row['Chromosome'],row['Start'],row['Stop'],strand]
                     updated_records.append(final_record)
+            elif 'AA' in pair_id:
+
+                query = '''
+                SELECT
+                    strand
+                FROM
+                    atg_atg AS atg_table
+                JOIN
+                    attachment_sequence as att_seq ON att_seq.id = atg_table.expected_beacon
+                JOIN
+                    dna_sequence AS dna_sequence ON dna_sequence.id = atg_table.expected_beacon
+                JOIN
+                spacer_pair as spacer_table ON atg_table.spacer_pair = spacer_table.id
+                JOIN
+                    target_gene as gene_table ON gene_table.id = spacer_table.target_gene
+                WHERE
+                    atg_table.file_registry_id$ = %s
+                '''
+                cur.execute(query, [pair_id])
+                result = cur.fetchone()
+                if result:
+                    strand = row['Strand']
+                    final_record = [pair_id,row['Chromosome'],row['Start'],row['Stop'],strand]
+                    updated_records.append(final_record)
             else:
-                strand = row['Strand']
-                final_record = [pair_id,row['Chromosome'],row['Start'],row['Stop'],strand]
-                updated_records.append(final_record)
+                continue
+
 
     updated_df = pd.DataFrame(updated_records, columns=['Target', 'Chromosome', 'Start', 'Stop', 'Strand'])
 
@@ -207,7 +298,7 @@ def get_target_info(metadata_fn, cosmic_info,attp_reg_seq, attp_prime_seq,refere
             attR = (attp_reg_seq + b_prime_sequence + beacon_end_sequence).upper()
 
             # store cargo sequence so we can search for subsequence locations
-            with open(cargo_reference_path, 'r') as f:
+            with open('cargo.fasta', 'r') as f:
                 cargo_sequence = ''.join(line.strip() for line in f if not line.startswith('>')).upper()
 
             cargo_pprime_end_loc = cargo_sequence.find(attp_prime_seq) + len(attp_prime_seq)
@@ -329,7 +420,7 @@ def get_target_info(metadata_fn, cosmic_info,attp_reg_seq, attp_prime_seq,refere
             cryptic_AttR_sequence = (attp_reg_seq + cryptic_b_prime_sequence).upper()
 
             # store cargo sequence so we can search for subsequence locations
-            with open(cargo_reference_path, 'r') as f:
+            with open('cargo.fasta', 'r') as f:
                 cargo_sequence = ''.join(line.strip() for line in f if not line.startswith('>')).upper()
 
             cargo_pprime_end_loc = cargo_sequence.find(attp_prime_seq) + len(attp_prime_seq)
@@ -444,14 +535,13 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Extract reads overlapping a certain genomic position.")
 
     # Add the arguments
-    parser.add_argument("--metadata", required=True, type=str, help="Metadata file")
     parser.add_argument("--cosmic_info", required=True, type=str, help="COSMIC info")
-    parser.add_argument("--attp_reg", required=True, type=str, help="P sequence")
-    parser.add_argument("--attp_prime", required=True, type=str, help="P prime sequence")
-    parser.add_argument("--reference", required=True, type=str, help="P prime sequence")
-    parser.add_argument("--cargo", required=True, type=str, help="P prime sequence")
+    parser.add_argument("--attp_name", required=True, type=str, help="attp name")
+    parser.add_argument("--reference", required=True, type=str, help="ref name")
+    parser.add_argument("--cargo", required=True, type=str, help="cargo name")
     parser.add_argument("--sample_name", required=True, type=str, help="P prime sequence")
+    parser.add_argument("--probes_name", required=True, type=str, help="Probe panel name")
     # Parse the arguments
     args = parser.parse_args()
 
-    get_target_info(args.metadata, args.cosmic_info, args.attp_reg, args.attp_prime, args.reference, args.cargo, args.sample_name)
+    get_target_info(args.cosmic_info, args.attp_name, args.reference, args.cargo, args.sample_name, args.probes_name)
