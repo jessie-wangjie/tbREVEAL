@@ -61,7 +61,7 @@ process DOWNLOAD_REFERENCE_GENOME {
         path("*.fa"), emit: reference_fasta
         path("*.fa.*"), emit: reference_index
     script:
-    if (reference_species == "Human") {
+    if (reference_species == "Human") || (reference_species == "Homo sapiens"){
         species_reference_fasta_path = 's3://tomebfx-data/references/hg38_no_alts/hg38_no_alts.fa'
         species_reference_amb_path = 's3://tomebfx-data/references/hg38_no_alts/hg38_no_alts.fa.amb'
         species_reference_ann_path = 's3://tomebfx-data/references/hg38_no_alts/hg38_no_alts.fa.ann'
@@ -77,14 +77,14 @@ process DOWNLOAD_REFERENCE_GENOME {
         species_reference_fai_path = 's3://tomebfx-data/references/hg38_no_alts/hg38_no_alts.fa.fai'
         species_reference_pac_path = 's3://tomebfx-data/references/hg38_no_alts/hg38_no_alts.fa.pac'
         species_reference_sa_path = 's3://tomebfx-data/references/hg38_no_alts/hg38_no_alts.fa.sa'
-    } else if (reference_species == "Monkey") {
-        species_reference_fasta_path = 's3://tomebfx-data/references/hg38_no_alts/hg38_no_alts.fa'
-        species_reference_amb_path = 's3://tomebfx-data/references/hg38_no_alts/hg38_no_alts.fa.amb'
-        species_reference_ann_path = 's3://tomebfx-data/references/hg38_no_alts/hg38_no_alts.fa.ann'
-        species_reference_bwt_path = 's3://tomebfx-data/references/hg38_no_alts/hg38_no_alts.fa.bwt'
-        species_reference_fai_path = 's3://tomebfx-data/references/hg38_no_alts/hg38_no_alts.fa.fai'
-        species_reference_pac_path = 's3://tomebfx-data/references/hg38_no_alts/hg38_no_alts.fa.pac'
-        species_reference_sa_path = 's3://tomebfx-data/references/hg38_no_alts/hg38_no_alts.fa.sa'
+    } else if (reference_species == "Monkey") || (reference_species == "Macaca fascicularis") || (reference_species == "NHP"){
+        species_reference_fasta_path = 's3://tomebfx-data/references/Macaca_fascicularis_6/GCA_011100615.1_Macaca_fascicularis_6.0_genomic.fna'
+        species_reference_amb_path = 's3://tomebfx-data/references/Macaca_fascicularis_6/GCA_011100615.1_Macaca_fascicularis_6.0_genomic.fna.amb'
+        species_reference_ann_path = 's3://tomebfx-data/references/Macaca_fascicularis_6/GCA_011100615.1_Macaca_fascicularis_6.0_genomic.fna.ann'
+        species_reference_bwt_path = 's3://tomebfx-data/references/Macaca_fascicularis_6/GCA_011100615.1_Macaca_fascicularis_6.0_genomic.fna.bwt'
+        species_reference_fai_path = 's3://tomebfx-data/references/Macaca_fascicularis_6/GCA_011100615.1_Macaca_fascicularis_6.0_genomic.fna.fai'
+        species_reference_pac_path = 's3://tomebfx-data/references/Macaca_fascicularis_6/GCA_011100615.1_Macaca_fascicularis_6.0_genomic.fna.pac'
+        species_reference_sa_path = 's3://tomebfx-data/references/Macaca_fascicularis_6/GCA_011100615.1_Macaca_fascicularis_6.0_genomic.fna.sa'
     }
     """
     aws s3 cp ${species_reference_fasta_path} .
@@ -150,7 +150,6 @@ process ADAPTER_AND_POLY_G_TRIM {
         } else if (umi_type == "xGen") {
             umi_loc = 'read1'
             umi_len = '11'
-            umi_skip = '0'
             umi_params = "--umi_loc=${umi_loc} --umi_len=${umi_len}"
         } else if (umi_type == "None") {
             umi_params = ""
@@ -326,20 +325,6 @@ process GENERATE_REPORT {
         """
         ulimit -s 65536
         collate_results.py --project_config_file ${project_config_file} --integration_stats_files ${integration_stats_files} --read_counts_per_site_files ${read_counts_per_site_files} --qc_summary_files ${qc_summary_files} --extracted_reads_dirs ${extracted_reads} --collapse_condition ${collapse_condition} --project_name ${project_name}
-        """
-    }
-
-process CREATE_PLOTS {
-    cache 'lenient'
-    publishDir "${params.outdir}"
-    input:
-        path excel_file
-    output:
-        path "*.png"
-
-    script:
-        """
-        plots.py --excel_report  ${excel_file}
         """
     }
 

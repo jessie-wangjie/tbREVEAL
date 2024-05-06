@@ -39,19 +39,49 @@ def get_attp_info(attp):
 
     return(attp_left,attp_right)
 
-
 def download_probes_file(probes_name):
-
     panel_query ='''
         SELECT probes_bed_file FROM hcpanel WHERE name$ = %s
         '''
     cur.execute(panel_query, [probes_name])
     probes_query_result = cur.fetchone()
-    probe_bed_file_download_blob_id = probes_query_result[0]['url'].split('/')[-1]
-    probe_bed_file_download_name = (probes_query_result[0]['name'])
-    benchling = Benchling(url="https://tome.benchling.com", auth_method=ApiKeyAuth(api_key))
-    benchling.blobs.download_file(blob_id=probe_bed_file_download_blob_id,destination_path=Path(f'probes.bed'))
-    print('Probes downloaded to probes.bed')
+
+    if probes_query_result is not None:
+        probe_bed_file_download_blob_id = probes_query_result[0]['url'].split('/')[-1]
+        probe_bed_file_download_name = (probes_query_result[0]['name'])
+        benchling = Benchling(url="https://tome.benchling.com", auth_method=ApiKeyAuth(api_key))
+        benchling.blobs.download_file(blob_id=probe_bed_file_download_blob_id,destination_path=Path(f'probes.bed'))
+        print('Probes downloaded to probes.bed')
+    else:
+        ## TODO: implement non-csv files for LMPCR assay (single "probe" targets)
+        query = '''
+                SELECT
+                    atg_table.file_registry_id$, chromosome, jmin, jmax
+                FROM
+                    atg_atg AS atg_table
+                JOIN
+                    attachment_sequence as att_seq ON att_seq.id = atg_table.expected_beacon
+                JOIN
+                    dna_sequence AS dna_sequence ON dna_sequence.id = atg_table.expected_beacon
+                JOIN
+                    spacer_pair as spacer_table ON atg_table.spacer_pair = spacer_table.id
+                JOIN
+                    target_gene as gene_table ON gene_table.id = spacer_table.target_gene
+                WHERE
+                    atg_table.name$ = %s
+                '''
+        cur.execute(query, [probes_name])
+        atg_id,chromosome,start,end,strand = cur.fetchone()
+        # Specifying the order
+        order = ["chromosome", "start", "end", "atg_id"]
+
+        # File path
+        file_path = "probes.bed"
+
+        # Writing to file
+        with open(file_path, "w") as file:
+            # Write the data in the specified order, tab-separated
+        file.write("\t".join(str(data[key]) for key in order) + "\n")
 
     return('probes.bed')
 
@@ -72,7 +102,6 @@ def download_cargo_genome(cargo_id):
         SeqIO.write(seq_record,output_handle, 'fasta-2line')
 
     print('Wrote cargo sequence to cargo.fasta')
-
 
 def get_target_info(cosmic_info,attp_name,reference_path,cargo_id, sample_name, probes_name):
 
@@ -146,10 +175,9 @@ def get_target_info(cosmic_info,attp_name,reference_path,cargo_id, sample_name, 
                     final_record = [pair_id,row['Chromosome'],row['Start'],row['Stop'],strand]
                     updated_records.append(final_record)
             elif 'AA' in pair_id:
-
                 query = '''
                 SELECT
-                    strand
+                    direction_of_transcription
                 FROM
                     atg_atg AS atg_table
                 JOIN
@@ -157,7 +185,7 @@ def get_target_info(cosmic_info,attp_name,reference_path,cargo_id, sample_name, 
                 JOIN
                     dna_sequence AS dna_sequence ON dna_sequence.id = atg_table.expected_beacon
                 JOIN
-                spacer_pair as spacer_table ON atg_table.spacer_pair = spacer_table.id
+                    spacer_pair as spacer_table ON atg_table.spacer_pair = spacer_table.id
                 JOIN
                     target_gene as gene_table ON gene_table.id = spacer_table.target_gene
                 WHERE
