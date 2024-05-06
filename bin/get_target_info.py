@@ -71,7 +71,7 @@ def download_probes_file(probes_name):
                     atg_table.name$ = %s
                 '''
         cur.execute(query, [probes_name])
-        atg_id,chromosome,start,end,strand = cur.fetchone()
+        atg_id,chromosome,start,end = cur.fetchone()
         # Specifying the order
         order = ["chromosome", "start", "end", "atg_id"]
 
@@ -81,7 +81,7 @@ def download_probes_file(probes_name):
         # Writing to file
         with open(file_path, "w") as file:
             # Write the data in the specified order, tab-separated
-        file.write("\t".join(str(data[key]) for key in order) + "\n")
+            file.write("\t".join([chromosome,start,end,atg_id]) + "\n")
 
     return('probes.bed')
 
@@ -102,11 +102,12 @@ def download_cargo_genome(cargo_id):
         SeqIO.write(seq_record,output_handle, 'fasta-2line')
 
     print('Wrote cargo sequence to cargo.fasta')
+    return('cargo.fasta')
 
 def get_target_info(cosmic_info,attp_name,reference_path,cargo_id, sample_name, probes_name):
 
     attp_reg_seq,attp_prime_seq = get_attp_info(attp_name)
-    download_cargo_genome(cargo_id)
+    cargo_fn = download_cargo_genome(cargo_id)
     probes_fn = download_probes_file(probes_name)
 
     ids = []
@@ -128,7 +129,9 @@ def get_target_info(cosmic_info,attp_name,reference_path,cargo_id, sample_name, 
     gene_distances = []
     same_strands = []
 
-    df = pd.read_csv(probes_fn,sep='\t')
+
+    df = pd.read_csv(probes_fn,sep='\t',header=None)
+
     df.columns = ['Chromosome','Start','Stop','Target']
 
     updated_records = []
@@ -141,7 +144,7 @@ def get_target_info(cosmic_info,attp_name,reference_path,cargo_id, sample_name, 
         elif ';' in row['Target']:
             pair_ids = row['Target'].split(';')
         else:
-            pair_ids = row['Target']
+            pair_ids = row['Target'].split(' ')
 
         for pair_id in pair_ids:
             if 'CAS' in pair_id:
@@ -194,7 +197,7 @@ def get_target_info(cosmic_info,attp_name,reference_path,cargo_id, sample_name, 
                 cur.execute(query, [pair_id])
                 result = cur.fetchone()
                 if result:
-                    strand = row['Strand']
+                    strand = result
                     final_record = [pair_id,row['Chromosome'],row['Start'],row['Stop'],strand]
                     updated_records.append(final_record)
             else:
@@ -317,14 +320,21 @@ def get_target_info(cosmic_info,attp_name,reference_path,cargo_id, sample_name, 
             beacon_beginning_sequence = ''.join(subprocess.check_output(beacon_beginning_sequence_command, shell=True).decode(sys.stdout.encoding).split('\n')[1:]).upper()
             beacon_end_sequence = ''.join(subprocess.check_output(beacon_end_sequence_command, shell=True).decode(sys.stdout.encoding).split('\n')[1:]).upper()
 
-            beacon_sequence = beacon_beginning_sequence + bases + beacon_end_sequence
+            if direction_of_transcription == '+':
+                beacon_sequence = beacon_beginning_sequence + bases + beacon_end_sequence
+                wt_command = f'samtools faidx {reference_path} {chr}:{int(spacer_jmin_cutsite)}-{int(spacer_jmax_cutsite)}'
+                wt_sequence = ''.join(subprocess.check_output(wt_command, shell=True).decode(sys.stdout.encoding).split('\n')[1:]).upper()
+                attL = (beacon_beginning_sequence + b_reg_sequence + attp_prime_seq).upper()
+                attR = (attp_reg_seq + b_prime_sequence + beacon_end_sequence).upper()
+            else:
+                beacon_sequence = reverse_complement(beacon_beginning_sequence + reverse_complement(bases) + beacon_end_sequence)
+                wt_command = f'samtools faidx {reference_path} {chr}:{int(spacer_jmin_cutsite)}-{int(spacer_jmax_cutsite)}'
+                wt_sequence = ''.join(subprocess.check_output(wt_command, shell=True).decode(sys.stdout.encoding).split('\n')[1:]).upper()
+                attL = (reverse_complement(beacon_end_sequence) + b_reg_sequence + attp_prime_seq).upper()
+                attR = (attp_reg_seq + b_prime_sequence + reverse_complement(beacon_beginning_sequence)).upper()
 
-            wt_command = f'samtools faidx {reference_path} {chr}:{int(spacer_jmin_cutsite)}-{int(spacer_jmax_cutsite)}'
-
-            wt_sequence = ''.join(subprocess.check_output(wt_command, shell=True).decode(sys.stdout.encoding).split('\n')[1:]).upper()
-            attL = (beacon_beginning_sequence + b_reg_sequence + attp_prime_seq).upper()
-            attR = (attp_reg_seq + b_prime_sequence + beacon_end_sequence).upper()
-
+            print(beacon_beginning_sequence)
+            print(beacon_end_sequence)
             # store cargo sequence so we can search for subsequence locations
             with open('cargo.fasta', 'r') as f:
                 cargo_sequence = ''.join(line.strip() for line in f if not line.startswith('>')).upper()
@@ -337,6 +347,7 @@ def get_target_info(cosmic_info,attp_name,reference_path,cargo_id, sample_name, 
 
             attL = attL + cargo_20bp_after_pprime
             attR = cargo_20bp_before_preg + attR
+
 
             length_of_dinucleotide = 2
 

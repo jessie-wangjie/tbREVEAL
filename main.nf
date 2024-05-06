@@ -1,21 +1,10 @@
 nextflow.enable.dsl=2
 
 
-params.reference = "/data/references/hg38.fa"
-params.outdir = ""
-params.ATTP_REG = 'GTGGTTTGTCTGGTCAACCACCGCGGT'
-params.ATTP_PRIME = 'CTCAGTGGTGTACGGTACAAACCCA'
+params.outdir = "output"
 params.collapse_condition = 'Complete'
-params.initial_mapper = 'minimap2'
+params.initial_mapper = ''
 params.project_name = ''
-params.samplesheet = ''
-params.reference_index_location = ''
-params.lmpcr_mode = false
-params.useBam = false
-params.umi_in_header = false
-params.umi_loc = 'per_read'
-params.umi_length = 5
-params.other_fastp_params = ''
 params.notebook_template = "${workflow.projectDir}/bin/report_generation.ipynb"
 params.bam2html_path = "${workflow.projectDir}/bin/utils/bam2html.py"
 params.dinucleotides = ''
@@ -30,12 +19,12 @@ params.bucket_name=''
 params.quilt_package_name=''
 
 params.project_id=''
-params.reads_parent_dir=''
+params.library_name=''
 
 process GET_PROJECT_INFO {
     input:
         val project_id
-        val reads_parent_dir
+        path raw_reads
         val benchling_warehouse_username
         val benchling_warehouse_password
         val benchling_warehouse_url
@@ -50,7 +39,21 @@ process GET_PROJECT_INFO {
         export WAREHOUSE_URL='${benchling_warehouse_url}'
         export API_KEY='${benchling_sdk_api_key}'
         export API_URL='${benchling_api_url}'
-        get_project_info.py --project_id ${project_id} --reads_parent_dir ${reads_parent_dir}
+        get_project_info.py --project_id ${project_id}
+        """
+}
+
+process DOWNLOAD_READS {
+    input:
+        val project_id
+    output:
+        path "*"
+    script:
+        """
+        run_id=\$(bs list projects -f csv | grep ${project_id} | cut -f 2 -d ',')
+        bs download projects -i \${run_id} -o . --extension=fastq.gz --no-metadata
+        mv */* .
+        find . -type d -empty -exec rmdir {} +
         """
 }
 
@@ -58,10 +61,11 @@ process DOWNLOAD_REFERENCE_GENOME {
     input:
         val reference_species
     output:
-        path("*.fa"), emit: reference_fasta
-        path("*.fa.*"), emit: reference_index
+        path("*.{fa,fna,fasta}"), emit: reference_fasta
+        path("*.{fa,fna,fasta}.*"), emit: reference_index
     script:
-    if (reference_species == "Human") || (reference_species == "Homo sapiens"){
+
+    if (reference_species == "Human" || reference_species == "Homo sapiens") {
         species_reference_fasta_path = 's3://tomebfx-data/references/hg38_no_alts/hg38_no_alts.fa'
         species_reference_amb_path = 's3://tomebfx-data/references/hg38_no_alts/hg38_no_alts.fa.amb'
         species_reference_ann_path = 's3://tomebfx-data/references/hg38_no_alts/hg38_no_alts.fa.ann'
@@ -77,7 +81,7 @@ process DOWNLOAD_REFERENCE_GENOME {
         species_reference_fai_path = 's3://tomebfx-data/references/hg38_no_alts/hg38_no_alts.fa.fai'
         species_reference_pac_path = 's3://tomebfx-data/references/hg38_no_alts/hg38_no_alts.fa.pac'
         species_reference_sa_path = 's3://tomebfx-data/references/hg38_no_alts/hg38_no_alts.fa.sa'
-    } else if (reference_species == "Monkey") || (reference_species == "Macaca fascicularis") || (reference_species == "NHP"){
+    } else if (reference_species == "Monkey" || reference_species == "Macaca fascicularis" || reference_species == "NHP") {
         species_reference_fasta_path = 's3://tomebfx-data/references/Macaca_fascicularis_6/GCA_011100615.1_Macaca_fascicularis_6.0_genomic.fna'
         species_reference_amb_path = 's3://tomebfx-data/references/Macaca_fascicularis_6/GCA_011100615.1_Macaca_fascicularis_6.0_genomic.fna.amb'
         species_reference_ann_path = 's3://tomebfx-data/references/Macaca_fascicularis_6/GCA_011100615.1_Macaca_fascicularis_6.0_genomic.fna.ann'
@@ -147,7 +151,7 @@ process ADAPTER_AND_POLY_G_TRIM {
             umi_len = '5'
             umi_skip = '2'
             umi_params = "--umi_loc=${umi_loc} --umi_len=${umi_len} --umi_skip=${umi_skip}"
-        } else if (umi_type == "xGen") {
+        } else if (umi_type == "LMPCR" || umi_type == "LM-PCR") {
             umi_loc = 'read1'
             umi_len = '11'
             umi_params = "--umi_loc=${umi_loc} --umi_len=${umi_len}"
@@ -442,20 +446,19 @@ workflow {
          """
          .stripIndent()
 
+    raw_reads = DOWNLOAD_READS(params.project_id)
+    samplesheet = GET_PROJECT_INFO(params.project_id,raw_reads,params.BENCHLING_WAREHOUSE_USERNAME,params.BENCHLING_WAREHOUSE_PASSWORD,params.BENCHLING_WAREHOUSE_URL,params.BENCHLING_API_KEY,params.BENCHLING_API_URL)
 
-    samplesheet = GET_PROJECT_INFO(params.project_id,params.reads_parent_dir,params.BENCHLING_WAREHOUSE_USERNAME,params.BENCHLING_WAREHOUSE_PASSWORD,params.BENCHLING_WAREHOUSE_URL,params.BENCHLING_API_KEY,params.BENCHLING_API_URL)
 
     // Existing logic to handle FASTQ file input
     samplesheet
     .splitCsv(header: true, sep: ',')
     .map { row ->
-        def r1 = "${row.reads_dir}/*R1*.fastq.gz"
-        def r2 = "${row.reads_dir}/*R2*.fastq.gz"
         tuple(
             row.sample_name,
             row.species,
-            file(r1),
-            file(r2),
+            file(row.read1),
+            file(row.read2),
             row.attb,
             row.attp,
             row.umi_type,
@@ -567,8 +570,6 @@ workflow {
         .combine(initial_alignment.deduped_alignment_bam, by: [0,1])
         .combine(reference_genome.reference_fasta)
         .set{translocation_detection_input_ch}
-
-    translocation_detection_input_ch.view()
 
     TRANSLOCATION_DETECTION(translocation_detection_input_ch)
 
