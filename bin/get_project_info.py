@@ -24,7 +24,7 @@ def get_project_info(project_id):
     metadata_query = '''
     SELECT sample_name,attb,attp,primers,species,probes_or_barcodes,donor,"group"
     FROM tomebiosciences.genomic_assays_metadata$raw
-    WHERE ctb_id = %s
+    WHERE ctb_id = %s and archived$ = false
     '''
     cur.execute(metadata_query, [project_id])
     metadata_query_result = cur.fetchall()
