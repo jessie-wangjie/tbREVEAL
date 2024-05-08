@@ -28,6 +28,7 @@ def add_sites(project_id, integration_csv_fn):
 
         if project_id not in curr_site_validated_project_ids:
             curr_site_validated_project_ids.append(project_id)
+            curr_site_validated_project_ids = list(sorted(curr_site_validated_project_ids))
             update_value_string = ','.join(curr_site_validated_project_ids)
             entityToUpdate = DnaSequenceUpdate(
                 fields=fields({
