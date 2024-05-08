@@ -63,7 +63,7 @@ process DOWNLOAD_READS {
         path "*"
     script:
         """
-        run_id=\$(bs list projects -f csv | grep ${project_id} | cut -f 2 -d ',')
+        run_id=\$(bs list projects --filter-term=^${project_id}\$ -f csv | grep ${project_id} | cut -f 2 -d ',')
         bs download projects -i \${run_id} -o . --extension=fastq.gz --no-metadata
         mv */* .
         find . -type d -empty -exec rmdir {} +
@@ -168,6 +168,10 @@ process ADAPTER_AND_POLY_G_TRIM {
         } else if (umi_type == "LMPCR" || umi_type == "LM-PCR") {
             umi_loc = 'read1'
             umi_len = '11'
+            umi_params = "--umi_loc=${umi_loc} --umi_len=${umi_len}"
+        } else if (umi_type == "xGen") {
+            umi_loc = 'read1'
+            umi_len = '9'
             umi_params = "--umi_loc=${umi_loc} --umi_len=${umi_len}"
         } else if (umi_type == "None") {
             umi_params = ""

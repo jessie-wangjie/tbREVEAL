@@ -22,7 +22,7 @@ def get_project_info(project_id):
     assay, sequencing_run_id, sequencing_project_name = project_query_result
 
     metadata_query = '''
-    SELECT sample_name,attb,attp,primers,species,probes_or_barcodes,donor,"group"
+    SELECT sample_name,attb,attp,umi_type,species,probes_or_barcodes,donor,"group"
     FROM tomebiosciences.genomic_assays_metadata$raw
     WHERE ctb_id = %s and archived$ = false
     '''
