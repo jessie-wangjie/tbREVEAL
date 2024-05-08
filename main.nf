@@ -293,6 +293,18 @@ process MEASURE_INTEGRATION {
     """
 }
 
+process UPDATE_BENCHLING_WITH_VALIDATED_SITES {
+    input:
+        val project_id
+        tuple val(sample_name), val(group), path(integration_csv)
+    output:
+
+    script:
+    """
+    update_benchling_with_offtargets.py --project_id ${project_id} --integration_csv ${integration_csv}
+    """
+}
+
 process GATHER_QC_INFO {
     cache 'lenient'
     publishDir "${params.outdir}/qc_info/${sample_name}/"
@@ -538,6 +550,8 @@ workflow {
 
     measure_integration_out = MEASURE_INTEGRATION(measure_integration_input_ch)
 
+    UPDATE_BENCHLING_WITH_VALIDATED_SITES(params.project_id,measure_integration_out.integration_stats_file)
+
     trimmed_and_merged_fastq.fastp_stats
         .combine(initial_alignment.original_alignment_bam,by:[0,1])
         .combine(initial_alignment.deduped_alignment_bam,by:[0,1])
@@ -552,11 +566,11 @@ workflow {
     ALIGNMENT_VISUALIZATION(alignment_viz_input_ch, params.bam2html_path)
 
     measure_integration_out.integration_stats_file
-    .collect(flat:false)
-    .flatMap{ it }
-    .map{ tuple -> tuple[2] }
-    .collect()
-    .set{integration_stats_files_ch}
+        .collect(flat:false)
+        .flatMap{ it }
+        .map{ tuple -> tuple[2] }
+        .collect()
+        .set{integration_stats_files_ch}
 
     extract_target_reads_out.read_counts_per_site_file
         .collect(flat:false)
