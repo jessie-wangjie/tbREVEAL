@@ -155,6 +155,10 @@ process ADAPTER_AND_POLY_G_TRIM {
             umi_loc = 'read1'
             umi_len = '11'
             umi_params = "--umi_loc=${umi_loc} --umi_len=${umi_len}"
+        } else if (umi_type == "xGen") {
+            umi_loc = 'read1'
+            umi_len = '9'
+            umi_params = "--umi_loc=${umi_loc} --umi_len=${umi_len}"
         } else if (umi_type == "None") {
             umi_params = ""
         }

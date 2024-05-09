@@ -12,25 +12,17 @@ from Bio.Seq import Seq
 import pandas as pd
 
 def get_project_info(project_id):
-    project_query = '''
-    SELECT assay,sequencing_run_id,sequencing_project_name
-    FROM custom_tracking
-    WHERE file_registry_id$ = %s
-    '''
-    cur.execute(project_query, [project_id])
-    project_query_result = cur.fetchone()
-    assay, sequencing_run_id, sequencing_project_name = project_query_result
 
     metadata_query = '''
-    SELECT sample_name,attb,attp,primers,species,probes_or_barcodes,donor,"group"
+    SELECT sample_name,attb,attp,primers,umi_type,species,probes_or_barcodes,donor,"group"
     FROM tomebiosciences.genomic_assays_metadata$raw
-    WHERE ctb_id = %s and archived$ = false
+    WHERE genomics_project_queue = %s and archived$ = false
     '''
     cur.execute(metadata_query, [project_id])
     metadata_query_result = cur.fetchall()
     sample_info = {}
     for result in metadata_query_result:
-        sample_name, attb, attp, umi_type, species, probes, donor, group = result
+        sample_name, attb, attp, primers, umi_type, species, probes, donor, group = result
 
         R1, R2 = None, None  # Initialize R1 and R2 for each sample_name
         for entry in os.listdir('.'):
