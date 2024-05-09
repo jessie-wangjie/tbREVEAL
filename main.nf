@@ -78,6 +78,28 @@ process DOWNLOAD_REFERENCE_GENOME {
         path("*.{fa,fna,fasta}.*"), emit: reference_index
     script:
 
+process DOWNLOAD_READS {
+    input:
+        val project_id
+    output:
+        path "*"
+    script:
+        """
+        run_id=\$(bs list projects -f csv | grep ${project_id} | cut -f 2 -d ',')
+        bs download projects -i \${run_id} -o . --extension=fastq.gz --no-metadata
+        mv */* .
+        find . -type d -empty -exec rmdir {} +
+        """
+}
+
+process DOWNLOAD_REFERENCE_GENOME {
+    input:
+        val reference_species
+    output:
+        path("*.{fa,fna,fasta}"), emit: reference_fasta
+        path("*.{fa,fna,fasta}.*"), emit: reference_index
+    script:
+
     if (reference_species == "Human" || reference_species == "Homo sapiens") {
         species_reference_fasta_path = 's3://tomebfx-data/references/hg38_no_alts/hg38_no_alts.fa'
         species_reference_amb_path = 's3://tomebfx-data/references/hg38_no_alts/hg38_no_alts.fa.amb'
