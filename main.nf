@@ -70,14 +70,6 @@ process DOWNLOAD_READS {
         """
 }
 
-process DOWNLOAD_REFERENCE_GENOME {
-    input:
-        val reference_species
-    output:
-        path("*.{fa,fna,fasta}"), emit: reference_fasta
-        path("*.{fa,fna,fasta}.*"), emit: reference_index
-    script:
-
 process DOWNLOAD_READS {
     input:
         val project_id
