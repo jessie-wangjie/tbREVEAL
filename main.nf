@@ -70,20 +70,6 @@ process DOWNLOAD_READS {
         """
 }
 
-process DOWNLOAD_READS {
-    input:
-        val project_id
-    output:
-        path "*"
-    script:
-        """
-        run_id=\$(bs list projects -f csv | grep ${project_id} | cut -f 2 -d ',')
-        bs download projects -i \${run_id} -o . --extension=fastq.gz --no-metadata
-        mv */* .
-        find . -type d -empty -exec rmdir {} +
-        """
-}
-
 process DOWNLOAD_REFERENCE_GENOME {
     input:
         val reference_species
