@@ -43,6 +43,19 @@ process GET_PROJECT_INFO {
         """
 }
 
+process DOWNLOAD_GTEX_DATA {
+    input:
+
+    output:
+        path('gtex_gene_median_tpm.csv')
+    script:
+        """
+        wget https://storage.googleapis.com/adult-gtex/bulk-gex/v8/rna-seq/GTEx_Analysis_2017-06-05_v8_RNASeQCv1.1.9_gene_median_tpm.gct.gz
+        gunzip GTEx_Analysis_2017-06-05_v8_RNASeQCv1.1.9_gene_median_tpm.gct.gz
+        mv GTEx_Analysis_2017-06-05_v8_RNASeQCv1.1.9_gene_median_tpm.gct gtex_gene_median_tpm.csv
+        """
+}
+
 process DOWNLOAD_READS {
     input:
         val project_id
@@ -50,7 +63,7 @@ process DOWNLOAD_READS {
         path "*"
     script:
         """
-        run_id=\$(bs list projects -f csv | grep ${project_id} | cut -f 2 -d ',')
+        run_id=\$(bs list projects --filter-term=^${project_id}\$ -f csv | grep ${project_id} | cut -f 2 -d ',')
         bs download projects -i \${run_id} -o . --extension=fastq.gz --no-metadata
         mv */* .
         find . -type d -empty -exec rmdir {} +
@@ -107,6 +120,7 @@ process GET_TARGET_INFORMATION {
     input:
         tuple val(sample_name),val(species),path(R1), path(R2), val(attb_name), val(attp_name),val(umi_type),val(probes_name),val(cargo),val(group),path(reference_genome), path(reference_index1),path(reference_index2),path(reference_index3),path(reference_index4),path(reference_index5),path(reference_index6)
         path cosmic_info
+        path gtex_info
         val benchling_warehouse_username
         val benchling_warehouse_password
         val benchling_warehouse_url
@@ -124,7 +138,7 @@ process GET_TARGET_INFORMATION {
         export WAREHOUSE_URL='${benchling_warehouse_url}'
         export API_KEY='${benchling_sdk_api_key}'
         export API_URL='${benchling_api_url}'
-        get_target_info.py --probes_name "${probes_name}" --cosmic_info "${cosmic_info}" --attp_name "${attp_name}" --reference "${reference_genome}" --cargo "${cargo}" --sample_name "${sample_name}"
+        get_target_info.py --probes_name "${probes_name}" --cosmic_info "${cosmic_info}" --gtex_info "${gtex_info}" --attp_name "${attp_name}" --reference "${reference_genome}" --cargo "${cargo}" --sample_name "${sample_name}"
         """
 }
 
@@ -478,6 +492,7 @@ workflow {
         .set {unique_species_ch}                     // Print the unique items
 
     reference_genome = DOWNLOAD_REFERENCE_GENOME(unique_species_ch)
+    gtex_data = DOWNLOAD_GTEX_DATA()
     trimmed_and_merged_fastq = ADAPTER_AND_POLY_G_TRIM(input_ch)
 
     input_ch
@@ -485,7 +500,7 @@ workflow {
         .combine(reference_genome.reference_index)
         .set{probe_info_input_ch}
 
-    probe_information = GET_TARGET_INFORMATION(probe_info_input_ch,params.cosmic_info,params.BENCHLING_WAREHOUSE_USERNAME,params.BENCHLING_WAREHOUSE_PASSWORD,params.BENCHLING_WAREHOUSE_URL,params.BENCHLING_API_KEY,params.BENCHLING_API_URL)
+    probe_information = GET_TARGET_INFORMATION(probe_info_input_ch,params.cosmic_info,gtex_data,params.BENCHLING_WAREHOUSE_USERNAME,params.BENCHLING_WAREHOUSE_PASSWORD,params.BENCHLING_WAREHOUSE_URL,params.BENCHLING_API_KEY,params.BENCHLING_API_URL)
 
     amplicon_files = GENERATE_AMPLICONS(probe_information.target_info)
 

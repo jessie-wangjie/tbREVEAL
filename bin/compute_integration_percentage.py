@@ -9,6 +9,7 @@ from Bio import SeqIO
 from Bio.Seq import Seq
 from Bio.SeqRecord import SeqRecord
 import re
+import numpy as np
 
 def has_indel_in_range(alignment, start_range, end_range):
     """
@@ -65,6 +66,8 @@ def compute_integration_percentage(target_info, alignment_dir, sample_name):
             elif operation == 4:
                 end -= length
         return start, end
+
+    target_info_df['Role in Cancer'] = target_info_df['Role in Cancer'].fillna('').astype(str)
 
     for index, row in target_info_df.iterrows():
         alignment_file = f"{row['id']}_alignment.bam"
@@ -229,6 +232,8 @@ def compute_integration_percentage(target_info, alignment_dir, sample_name):
         def calc_percentage(numerator, denominator):
             return (numerator / denominator * 100) if denominator > 0 else 0.0
 
+        row['Role in Cancer'] = row['Role in Cancer'].replace(', ',';')
+
         integration_dict[row['id']] = (
             counts['wt'],
             counts['ambiguous_attL'],
@@ -248,7 +253,7 @@ def compute_integration_percentage(target_info, alignment_dir, sample_name):
             complete_beacon_percentage,
             beacon_fidelity_percentage,
             indel_percent
-        ) + tuple(row[key] for key in ['gene_name', 'gene_strand', 'gene_distance', 'same_strand', 'overlapping_feature', 'threat_tier','Cosmic Gene','Role in Cancer'])
+        ) + tuple(row[key] for key in ['gene_name', 'gene_strand', 'gene_distance', 'same_strand', 'overlapping_feature', 'threat_tier','Cosmic Gene','Role in Cancer','Liver Expression (TPM)'])
     return integration_dict
 
 
@@ -257,11 +262,11 @@ def write_integration_percentage(integration_dict, sample_name):
     filename = f'{sample_name}_integration_stats.csv'
     with open(filename, 'w') as file:
         # Write the header row
-        file.write('Target,Number of WT Reads,Number of AttL Partial Reads,Number of AttL Complete Reads,Number of AttL Cargo Reads,Number of AttR Partial Reads,Number of AttR Complete Reads,Number of AttR Cargo Reads,Number of Ambiguous Beacon Reads,Number of Partial Beacon Reads,Number of Complete Beacon Reads,Number of Indel Reads,Partial P Integration Percentage,Complete P Integration Percentage,Cargo and P Integration Percentage,Partial Beacon Placement,Complete Beacon Placement,Beacon Fidelity,Indels,Closest Gene Name,Gene Strand,Distance from Gene,Same Strand as Cryptic,Overlapping Feature,Threat Tier,Cosmic Gene,Role in Cancer\n')
+        file.write('Target,Number of WT Reads,Number of AttL Partial Reads,Number of AttL Complete Reads,Number of AttL Cargo Reads,Number of AttR Partial Reads,Number of AttR Complete Reads,Number of AttR Cargo Reads,Number of Ambiguous Beacon Reads,Number of Partial Beacon Reads,Number of Complete Beacon Reads,Number of Indel Reads,Partial P Integration Percentage,Complete P Integration Percentage,Cargo and P Integration Percentage,Partial Beacon Placement,Complete Beacon Placement,Beacon Fidelity,Indels,Closest Gene Name,Gene Strand,Distance from Gene,Same Strand as Cryptic,Overlapping Feature,Threat Tier,Cosmic Gene,Role in Cancer,Liver Expression (TPM)\n')
 
         # Write the data rows
         for key, value in integration_dict.items():
-            file.write(f'{key},{value[0]},{value[1]},{value[2]},{value[3]},{value[4]},{value[5]},{value[6]},{value[7]},{value[8]},{value[9]},{value[10]},{value[11]},{value[12]},{value[13]},{value[14]},{value[15]},{value[16]},{value[17]},{value[18]},{value[19]},{value[20]},{value[21]},{value[22]},{value[23]},{value[24]}\n')
+            file.write(f'{key},{value[0]},{value[1]},{value[2]},{value[3]},{value[4]},{value[5]},{value[6]},{value[7]},{value[8]},{value[9]},{value[10]},{value[11]},{value[12]},{value[13]},{value[14]},{value[15]},{value[16]},{value[17]},{value[18]},{value[19]},{value[20]},{value[21]},{value[22]},{value[23]},{value[24]},{value[25]},{value[26]}\n')
 
 
 if __name__ == "__main__":

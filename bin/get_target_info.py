@@ -104,7 +104,7 @@ def download_cargo_genome(cargo_id):
     print('Wrote cargo sequence to cargo.fasta')
     return('cargo.fasta')
 
-def get_target_info(cosmic_info,attp_name,reference_path,cargo_id, sample_name, probes_name):
+def get_target_info(cosmic_info,gtex_info,attp_name,reference_path,cargo_id, sample_name, probes_name):
 
     attp_reg_seq,attp_prime_seq = get_attp_info(attp_name)
     cargo_fn = download_cargo_genome(cargo_id)
@@ -557,14 +557,19 @@ def get_target_info(cosmic_info,attp_name,reference_path,cargo_id, sample_name, 
 
     df = pd.DataFrame(data)
     cosmic_info_df = pd.read_csv(cosmic_info,sep=',')
+    gtex_info_df = pd.read_csv(gtex_info,sep='\t',skiprows=2)
 
     cosmic_info_df = cosmic_info_df[['Gene Symbol','Role in Cancer']]
+    gtex_info_df = gtex_info_df[['Description','Liver']]
 
     final_df = pd.merge(df,cosmic_info_df,left_on='gene_name',right_on='Gene Symbol',how='left')
 
-    final_df['Cosmic Gene'] = final_df['Role in Cancer'].apply(lambda x: 'No' if pd.isna(x) else 'Yes')
+    final_df = pd.merge(final_df,gtex_info_df,left_on='gene_name',right_on='Description',how='left')
 
+    final_df['Cosmic Gene'] = final_df['Role in Cancer'].apply(lambda x: 'No' if pd.isna(x) else 'Yes')
     final_df = final_df.drop('Gene Symbol', axis=1)
+    final_df = final_df.drop('Description', axis=1)
+    final_df=final_df.rename(columns = {'Liver':'Liver Expression (TPM)'})
 
     final_df.to_csv(f'{sample_name}_target_info.csv', index=False)
     return(final_df)
@@ -575,6 +580,7 @@ if __name__ == "__main__":
 
     # Add the arguments
     parser.add_argument("--cosmic_info", required=True, type=str, help="COSMIC info")
+    parser.add_argument("--gtex_info", required=True, type=str, help="GTEX info")
     parser.add_argument("--attp_name", required=True, type=str, help="attp name")
     parser.add_argument("--reference", required=True, type=str, help="ref name")
     parser.add_argument("--cargo", required=True, type=str, help="cargo name")
@@ -583,4 +589,4 @@ if __name__ == "__main__":
     # Parse the arguments
     args = parser.parse_args()
 
-    get_target_info(args.cosmic_info, args.attp_name, args.reference, args.cargo, args.sample_name, args.probes_name)
+    get_target_info(args.cosmic_info, args.gtex_info, args.attp_name, args.reference, args.cargo, args.sample_name, args.probes_name)
