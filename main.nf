@@ -3,8 +3,7 @@ nextflow.enable.dsl=2
 
 params.outdir = "output"
 params.collapse_condition = 'Complete'
-params.initial_mapper = ''
-params.project_name = ''
+params.initial_mapper = 'bwa'
 params.notebook_template = "${workflow.projectDir}/bin/report_generation.ipynb"
 params.bam2html_path = "${workflow.projectDir}/bin/utils/bam2html.py"
 params.dinucleotides = ''
@@ -15,11 +14,9 @@ params.BENCHLING_WAREHOUSE_URL=''
 params.BENCHLING_WAREHOUSE_API_KEY=''
 params.BENCHLING_WAREHOUSE_SDK_KEY=''
 params.BENCHLING_API_URL=''
-params.bucket_name=''
-params.quilt_package_name=''
-
+params.bucket_name='s3://tb-ngs-genomics-quilt/'
 params.project_id=''
-params.library_name=''
+params.quilt_package_name="HybridCapture/${params.project_id}"
 
 process GET_PROJECT_INFO {
     input:
@@ -397,14 +394,25 @@ process CREATE_QUILT_PACKAGE {
     input:
         val output_folder
         path notebook_report
-        val project_name
+        path cas_bed
+        val project_id
         val bucket_name
         val quilt_output
+        val benchling_warehouse_username
+        val benchling_warehouse_password
+        val benchling_warehouse_url
+        val benchling_sdk_api_key
+        val benchling_api_url
     output:
 
     script:
     """
-    create_quilt_package.py --output_folder ${workflow.launchDir}/${output_folder} --project_name ${project_name} --bucket_name ${bucket_name} --package_name ${quilt_output}
+    export WAREHOUSE_USERNAME='${benchling_warehouse_username}'
+    export WAREHOUSE_PASSWORD='${benchling_warehouse_password}'
+    export WAREHOUSE_URL='${benchling_warehouse_url}'
+    export API_KEY='${benchling_sdk_api_key}'
+    export API_URL='${benchling_api_url}'
+    create_quilt_package.py --output_folder ${workflow.launchDir}/${output_folder} --project_id ${project_id} --bucket_name ${bucket_name} --package_name ${quilt_output}
     """
 }
 
@@ -433,7 +441,7 @@ process INTERSECT_CAS_DATABASE {
         val dinucleotides
         tuple val(sample_name), val(group), path(bnd_file)
     output:
-        path '*.cas.bed'
+        path '*.cas.bed', emit: cas_bed
 
     script:
     def args = dinucleotides == "" ? "": "--dinucleotides ${dinucleotides}"
@@ -456,10 +464,9 @@ workflow {
          ${params.manifest.author}
          ${params.manifest.description}
          ==========================
-         project name : ${params.project_name}
+         project name : ${params.project_id}
          input from   : ${params.samplesheet}
          output to    : ${params.outdir}
-         workflow directory : ${params.bam2html_path}
 
          other parameters:
          reference genome: ${params.reference}
@@ -586,7 +593,7 @@ workflow {
         .collect()
         .set{extracted_reads_files_ch}
 
-    report_excel_file = GENERATE_REPORT(samplesheet,integration_stats_files_ch,read_counts_per_site_files_ch,qc_summary_files_ch,extracted_reads_files_ch, params.collapse_condition, params.project_name)
+    report_excel_file = GENERATE_REPORT(samplesheet,integration_stats_files_ch,read_counts_per_site_files_ch,qc_summary_files_ch,extracted_reads_files_ch, params.collapse_condition, params.project_id)
 
     // ** MULTIQC REPORT **
     trimmed_and_merged_fastq.fastp_stats
@@ -606,11 +613,12 @@ workflow {
 
     TRANSLOCATION_DETECTION(translocation_detection_input_ch)
 
-    INTERSECT_CAS_DATABASE(params.dinucleotides, TRANSLOCATION_DETECTION.out.bnd)
+    intersect_cas_database_out = INTERSECT_CAS_DATABASE(params.dinucleotides, TRANSLOCATION_DETECTION.out.bnd)
 
     // ** CREATE HTML REPORT **
 
     html_report = CREATE_PYTHON_NOTEBOOK_REPORT(report_excel_file, params.notebook_template)
 
-    CREATE_QUILT_PACKAGE(params.outdir,html_report,params.project_name,params.bucket_name,params.quilt_package_name)
+    CREATE_QUILT_PACKAGE(params.outdir,html_report,intersect_cas_database_out.cas_bed.collect(),params.project_id,params.bucket_name,params.quilt_package_name,params.BENCHLING_WAREHOUSE_USERNAME,params.BENCHLING_WAREHOUSE_PASSWORD,params.BENCHLING_WAREHOUSE_URL,params.BENCHLING_API_KEY,params.BENCHLING_API_URL)
+
 }

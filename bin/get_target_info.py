@@ -590,3 +590,4 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     get_target_info(args.cosmic_info, args.gtex_info, args.attp_name, args.reference, args.cargo, args.sample_name, args.probes_name)
+
