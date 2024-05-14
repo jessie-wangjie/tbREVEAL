@@ -12,6 +12,14 @@ from Bio.Seq import Seq
 import pandas as pd
 
 def get_project_info(project_id):
+    project_query = '''
+    SELECT assay,sequencing_run_id,sequencing_project_name
+    FROM custom_tracking
+    WHERE file_registry_id$ = %s
+    '''
+    cur.execute(project_query, [project_id])
+    project_query_result = cur.fetchone()
+    assay, sequencing_run_id, sequencing_project_name = project_query_result
 
     metadata_query = '''
     SELECT sample_name,attb,attp,primers,umi_type,species,probes_or_barcodes,donor,"group"
