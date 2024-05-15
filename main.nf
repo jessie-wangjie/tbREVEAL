@@ -297,10 +297,20 @@ process UPDATE_BENCHLING_WITH_VALIDATED_SITES {
     input:
         val project_id
         tuple val(sample_name), val(group), path(integration_csv)
+        val benchling_warehouse_username
+        val benchling_warehouse_password
+        val benchling_warehouse_url
+        val benchling_sdk_api_key
+        val benchling_api_url
     output:
 
     script:
     """
+    export WAREHOUSE_USERNAME='${benchling_warehouse_username}'
+    export WAREHOUSE_PASSWORD='${benchling_warehouse_password}'
+    export WAREHOUSE_URL='${benchling_warehouse_url}'
+    export API_KEY='${benchling_sdk_api_key}'
+    export API_URL='${benchling_api_url}'
     update_benchling_with_offtargets.py --project_id ${project_id} --integration_csv ${integration_csv}
     """
 }
@@ -550,7 +560,7 @@ workflow {
 
     measure_integration_out = MEASURE_INTEGRATION(measure_integration_input_ch)
 
-    UPDATE_BENCHLING_WITH_VALIDATED_SITES(params.project_id,measure_integration_out.integration_stats_file)
+    UPDATE_BENCHLING_WITH_VALIDATED_SITES(params.project_id,measure_integration_out.integration_stats_file,params.BENCHLING_WAREHOUSE_USERNAME,params.BENCHLING_WAREHOUSE_PASSWORD,params.BENCHLING_WAREHOUSE_URL,params.BENCHLING_API_KEY,params.BENCHLING_API_URL)
 
     trimmed_and_merged_fastq.fastp_stats
         .combine(initial_alignment.original_alignment_bam,by:[0,1])
