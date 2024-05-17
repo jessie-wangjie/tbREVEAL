@@ -60,7 +60,7 @@ process DOWNLOAD_READS {
         path "*"
     script:
         """
-        run_id=\$(bs list projects --filter-term=^${project_id}\$ -f csv | grep ${project_id} | cut -f 2 -d ',')
+        run_id=\$(bs list projects --filter-term=^${project_id}\$ -f csv | grep "${project_id}" | cut -f 2 -d ',' | tail -1)
         bs download projects -i \${run_id} -o . --extension=fastq.gz --no-metadata
         mv */* .
         find . -type d -empty -exec rmdir {} +
@@ -156,6 +156,7 @@ process ADAPTER_AND_POLY_G_TRIM {
         umi_loc = ''
         umi_len = ''
         umi_skip = ''
+        umi_type = "Twist"
 
         if (umi_type == "Twist") {
             umi_loc = 'per_read'
@@ -196,34 +197,42 @@ process ALIGN_READS {
     if (initial_mapper == "minimap2") {
         alignment_command = "minimap2 -ax sr -t 96 ${genome_reference} ${fastq}"
     } else if (initial_mapper == "bwa") {
-        alignment_command = "bwa mem -t 96 ${genome_reference} ${fastq}"
-        cargo_alignment_command = "bwa mem -t 96 ${cargo_reference}"
+        alignment_command = "bwa mem -p -t 8 ${genome_reference} ${fastq}"
+        cargo_alignment_command = "bwa mem -t 8 ${cargo_reference}"
     } else {
         error "Unsupported initial_mapper: $initial_mapper"
     }
     if (umi_type != "None") {
         """
-        $alignment_command | sambamba view -S -t 96 -f bam -o ${sample_name}_initial_alignment.bam /dev/stdin
-        sambamba sort --show-progress -t 96 -o ${sample_name}_initial_alignment_sorted.bam ${sample_name}_initial_alignment.bam
-        mv ${sample_name}_initial_alignment_sorted.bam ${sample_name}_initial_alignment.bam
-        mv ${sample_name}_initial_alignment_sorted.bam.bai ${sample_name}_initial_alignment.bam.bai
-        samtools index ${sample_name}_initial_alignment.bam
-        umi_tools dedup -I ${sample_name}_initial_alignment.bam --umi-separator ":" -S ${sample_name}_deduped_alignment.bam --method unique
-        samtools index ${sample_name}_deduped_alignment.bam
+        $alignment_command > ${sample_name}_initial_alignment.sam
 
-        samtools view -f 4 ${sample_name}_initial_alignment.bam | samtools bam2fq | pigz -p 8 > ${sample_name}_unaligned_reads.fastq.gz
+        # single-end reads
+        samtools view -F1 ${sample_name}_initial_alignment.sam -b | samtools sort -@ 8 - -o ${sample_name}.se.genome.bam
+        samtools index ${sample_name}.se.genome.bam
+        umi_tools dedup -I ${sample_name}.se.genome.bam --umi-separator ":" -S ${sample_name}.se.genome.dedup.bam --method unique
+        samtools index ${sample_name}.se.genome.dedup.bam
+
+        # paired-end reads
+        samtools view -f1 ${sample_name}_initial_alignment.sam -b | samtools sort -@ 8 - -o ${sample_name}.pe.genome.bam
+
+        ## extract unmapped reads, then map to cargo
+        samtools fastq --rf 12 -F2304 ${sample_name}.pe.genome.bam -1 ${sample_name}.unmapped.R1.fastq.gz -2 ${sample_name}.unmapped.R2.fastq.gz
         bwa index ${cargo_reference}
-        $cargo_alignment_command ${sample_name}_unaligned_reads.fastq.gz | sambamba view -S -t 96 -f bam -o ${sample_name}_unaligned_reads_aligned_to_cargo.bam /dev/stdin
-        sambamba sort --show-progress -t 96 -o ${sample_name}_unaligned_reads_aligned_to_cargo_sorted.bam ${sample_name}_unaligned_reads_aligned_to_cargo.bam
-        mv ${sample_name}_unaligned_reads_aligned_to_cargo_sorted.bam ${sample_name}_unaligned_reads_aligned_to_cargo.bam
-        mv ${sample_name}_unaligned_reads_aligned_to_cargo_sorted.bam.bai ${sample_name}_unaligned_reads_aligned_to_cargo.bam.bai
-        samtools index ${sample_name}_unaligned_reads_aligned_to_cargo.bam
-        umi_tools dedup -I ${sample_name}_unaligned_reads_aligned_to_cargo.bam --umi-separator ":" -S ${sample_name}_unaligned_reads_deduped_aligned_to_cargo.bam --method unique
-        samtools index ${sample_name}_unaligned_reads_deduped_aligned_to_cargo.bam
+        $cargo_alignment_command ${sample_name}.unmapped.R1.fastq.gz ${sample_name}.unmapped.R2.fastq.gz > ${sample_name}.pe.cargo.sam
+        samtools sort -@ 8 ${sample_name}.pe.cargo.sam -o ${sample_name}.pe.cargo.bam
+        samtools index ${sample_name}.pe.cargo.bam
 
-        samtools merge -o final.bam ${sample_name}_deduped_alignment.bam ${sample_name}_unaligned_reads_deduped_aligned_to_cargo.bam
-        mv final.bam ${sample_name}_deduped_alignment.bam
+        ## merge reference and cargo bams
+        samtools merge ${sample_name}.pe.genome.bam ${sample_name}.pe.cargo.bam -o ${sample_name}.pe.genome.cargo.bam
+        umi_tools dedup -I ${sample_name}.pe.genome.cargo.bam --umi-separator ":" -S ${sample_name}.pe.genome.cargo.dedup.bam --method unique --paired
+        samtools index ${sample_name}.pe.genome.cargo.dedup.bam
+
+        # merge SE and PE results
+        samtools merge ${sample_name}.se.genome.bam ${sample_name}.pe.genome.bam -o ${sample_name}_initial_alignment.bam
+        samtools index ${sample_name}_initial_alignment.bam
+        samtools merge ${sample_name}.se.genome.dedup.bam ${sample_name}.pe.genome.cargo.dedup.bam -o ${sample_name}_deduped_alignment.bam
         samtools index ${sample_name}_deduped_alignment.bam
+        rm *.sam
         """
     } else {
         """
@@ -431,6 +440,10 @@ process TRANSLOCATION_DETECTION {
     delly call -g combined_genomes.fasta ${bam_file} -o ${sample_name}.delly.vcf -q 0 -r 0 -c 1 -z 0 -m 0 -t DEL,INV,BND &> log
     bcftools query ${sample_name}.delly.vcf -i 'SVTYPE=\"BND\"' -f "%CHROM\\t%POS\\t%CHR2\\t%POS2\\t%ID\\t%PE\\t%SR\\n" > ${sample_name}.bnd.bed
     bcftools query ${sample_name}.delly.vcf -i 'SVTYPE=\"INV\" || SVTYPE=\"DEL\"' -f "%CHROM\\t%POS\\t%CHROM\\t%END\\t%ID\\t%PE\\t%SR\\n" >> ${sample_name}.bnd.bed
+
+    # extract the paired-end reads, one end mapped to reference, and one end to the cargo
+    cargo_name=`grep \\> ${cargo} | sed -e 's\/>\/\/'`
+    samtools view -e "(rname==$cargo_name || rnext==$cargo_name) &&  rname!=rnext" ${bam_file}
     """
 }
 
@@ -550,7 +563,7 @@ workflow {
 
     measure_integration_out = MEASURE_INTEGRATION(measure_integration_input_ch)
 
-    UPDATE_BENCHLING_WITH_VALIDATED_SITES(params.project_id,measure_integration_out.integration_stats_file)
+    // UPDATE_BENCHLING_WITH_VALIDATED_SITES(params.project_id,measure_integration_out.integration_stats_file)
 
     trimmed_and_merged_fastq.fastp_stats
         .combine(initial_alignment.original_alignment_bam,by:[0,1])
@@ -619,6 +632,6 @@ workflow {
 
     html_report = CREATE_PYTHON_NOTEBOOK_REPORT(report_excel_file, params.notebook_template)
 
-    CREATE_QUILT_PACKAGE(params.outdir,html_report,intersect_cas_database_out.cas_bed.collect(),params.project_id,params.bucket_name,params.quilt_package_name,params.BENCHLING_WAREHOUSE_USERNAME,params.BENCHLING_WAREHOUSE_PASSWORD,params.BENCHLING_WAREHOUSE_URL,params.BENCHLING_API_KEY,params.BENCHLING_API_URL)
+    // CREATE_QUILT_PACKAGE(params.outdir,html_report,intersect_cas_database_out.cas_bed.collect(),params.project_id,params.bucket_name,params.quilt_package_name,params.BENCHLING_WAREHOUSE_USERNAME,params.BENCHLING_WAREHOUSE_PASSWORD,params.BENCHLING_WAREHOUSE_URL,params.BENCHLING_API_KEY,params.BENCHLING_API_URL)
 
 }

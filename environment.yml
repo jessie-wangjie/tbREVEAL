@@ -90,7 +90,7 @@ dependencies:
   - libpng=1.6.39=h753d276_0
   - libsqlite=3.44.2=h2797004_0
   - libssh2=1.11.0=h0841786_0
-  - libstdcxx-ng=13.2.0=h7e041cc_3
+  - conda install conda-forge::libstdcxx-ngcxx-ng=13.2.0=h7e041cc_3
   - libtiff=4.6.0=h8b53f26_0
   - libuuid=2.38.1=h0b41bf4_0
   - libwebp-base=1.3.2=hd590300_0
