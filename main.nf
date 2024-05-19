@@ -320,10 +320,7 @@ process GATHER_QC_INFO {
 
 process ALIGNMENT_VISUALIZATION {
     cache 'lenient'
-    publishDir "${params.outdir}/alignment_visualizations/${sample_name}/attL_alignments/", pattern:'*attL*.html'
-    publishDir "${params.outdir}/alignment_visualizations/${sample_name}/attR_alignments/", pattern:'*attR*.html'
-    publishDir "${params.outdir}/alignment_visualizations/${sample_name}/beacon_alignments/", pattern:'*beacon*.html'
-    publishDir "${params.outdir}/alignment_visualizations/${sample_name}/wt_alignments/", pattern:'*wt*.html'
+    publishDir "${params.outdir}/alignment_visualizations/${sample_name}/", pattern:'*.html'
 
     input:
         tuple val(sample_name), val(group), path(target_info), path(amplicons), path(probe_read_alignments), path(edited_reads)

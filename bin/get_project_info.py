@@ -14,7 +14,7 @@ import pandas as pd
 def get_project_info(project_id):
   
     metadata_query = '''
-    SELECT sample_name,attb,attp,primers,umi_type,species,probes_or_barcodes,donor,"group"
+    SELECT sequencing_sample_name,attb,attp,primers,umi_type,species,probes_or_barcodes,donor,"group"
     FROM tomebiosciences.genomic_assays_metadata$raw
     WHERE genomics_project_queue = %s and archived$ = false
     '''
