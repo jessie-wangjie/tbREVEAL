@@ -41,12 +41,13 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     project_id = args.project_id
+    project_id_base = project_id.split('_')[0]
     output_folder = args.output_folder
     package_name = args.package_name
     bucket_name = args.bucket_name
 
     benchling = Benchling(url="https://tome.benchling.com", auth_method=ApiKeyAuth(api_key))
-    entity = benchling.custom_entities.list(name=project_id)
+    entity = benchling.custom_entities.list(name=project_id_base)
     print(entity.first())
 
     def print_absolute_paths(root_dir):
