@@ -5,16 +5,12 @@ import argparse
 from benchling_sdk.services.v2.stable import blob_service
 from benchling_sdk.benchling import Benchling
 from benchling_sdk.auth.api_key_auth import ApiKeyAuth
-from pathlib import Path
-from Bio import SeqIO
-from Bio.SeqRecord import SeqRecord
-from Bio.Seq import Seq
 import pandas as pd
 
 def get_project_info(project_id):
-  
+
     metadata_query = '''
-    SELECT sequencing_sample_name,attb,attp,primers,umi_type,species,probes_or_barcodes,donor,"group"
+    SELECT sample_name,sequencing_sample_name,attb,attp,primers,umi_type,species,probes_or_barcodes,donor,"group"
     FROM tomebiosciences.genomic_assays_metadata$raw
     WHERE genomics_project_queue = %s and archived$ = false
     '''
@@ -22,11 +18,11 @@ def get_project_info(project_id):
     metadata_query_result = cur.fetchall()
     sample_info = {}
     for result in metadata_query_result:
-        sample_name, attb, attp, primers, umi_type, species, probes, donor, group = result
+        sample_name, sequencing_sample_name,attb, attp, primers, umi_type, species, probes, donor, group = result
 
         R1, R2 = None, None  # Initialize R1 and R2 for each sample_name
         for entry in os.listdir('.'):
-            if sample_name in entry:
+            if sequencing_sample_name in entry:
                 entry_path = os.path.join(os.getcwd(), entry)  # Get the full path to the directory
                 if "R1" in entry_path:
                     R1 = entry_path  # Store the absolute path

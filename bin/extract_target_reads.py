@@ -5,8 +5,6 @@ import pandas as pd
 import pysam
 import subprocess
 from Bio import SeqIO
-from Bio.Seq import Seq
-from Bio.SeqRecord import SeqRecord
 
 def extract_reads(target_info, bam_file, window, sample_name):
 
@@ -23,7 +21,7 @@ def extract_reads(target_info, bam_file, window, sample_name):
         end_position = row['end']
         chromosome = row['chromosome']
         id = row['id']
-        start = start_position - window
+        start = max(1, start_position - window)
         end = end_position + window
 
         print('Extracting reads for ' + id + '...')

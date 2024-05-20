@@ -83,14 +83,14 @@ process DOWNLOAD_REFERENCE_GENOME {
         species_reference_fai_path = 's3://tomebfx-data/references/hg38_no_alts/hg38_no_alts.fa.fai'
         species_reference_pac_path = 's3://tomebfx-data/references/hg38_no_alts/hg38_no_alts.fa.pac'
         species_reference_sa_path = 's3://tomebfx-data/references/hg38_no_alts/hg38_no_alts.fa.sa'
-    } else if (reference_species == "Mouse") {
-        species_reference_fasta_path = 's3://tomebfx-data/references/hg38_no_alts/hg38_no_alts.fa'
-        species_reference_amb_path = 's3://tomebfx-data/references/hg38_no_alts/hg38_no_alts.fa.amb'
-        species_reference_ann_path = 's3://tomebfx-data/references/hg38_no_alts/hg38_no_alts.fa.ann'
-        species_reference_bwt_path = 's3://tomebfx-data/references/hg38_no_alts/hg38_no_alts.fa.bwt'
-        species_reference_fai_path = 's3://tomebfx-data/references/hg38_no_alts/hg38_no_alts.fa.fai'
-        species_reference_pac_path = 's3://tomebfx-data/references/hg38_no_alts/hg38_no_alts.fa.pac'
-        species_reference_sa_path = 's3://tomebfx-data/references/hg38_no_alts/hg38_no_alts.fa.sa'
+    } else if (reference_species == "Mouse" || reference_species == "Mus musculus") {
+        species_reference_fasta_path = 's3://tomebfx-data/references/mm39_and_rosa26_and_F9_insert/mm39_and_rosa26_and_F9_insert.fasta'
+        species_reference_amb_path = 's3://tomebfx-data/references/mm39_and_rosa26_and_F9_insert/mm39_and_rosa26_and_F9_insert.fasta.amb'
+        species_reference_ann_path = 's3://tomebfx-data/references/mm39_and_rosa26_and_F9_insert/mm39_and_rosa26_and_F9_insert.fasta.ann'
+        species_reference_bwt_path = 's3://tomebfx-data/references/mm39_and_rosa26_and_F9_insert/mm39_and_rosa26_and_F9_insert.fasta.bwt'
+        species_reference_fai_path = 's3://tomebfx-data/references/mm39_and_rosa26_and_F9_insert/mm39_and_rosa26_and_F9_insert.fasta.fai'
+        species_reference_pac_path = 's3://tomebfx-data/references/mm39_and_rosa26_and_F9_insert/mm39_and_rosa26_and_F9_insert.fasta.pac'
+        species_reference_sa_path = 's3://tomebfx-data/references/mm39_and_rosa26_and_F9_insert/mm39_and_rosa26_and_F9_insert.fasta.sa'
     } else if (reference_species == "Monkey" || reference_species == "Macaca fascicularis" || reference_species == "NHP") {
         species_reference_fasta_path = 's3://tomebfx-data/references/Macaca_fascicularis_6/GCA_011100615.1_Macaca_fascicularis_6.0_genomic.fna'
         species_reference_amb_path = 's3://tomebfx-data/references/Macaca_fascicularis_6/GCA_011100615.1_Macaca_fascicularis_6.0_genomic.fna.amb'
@@ -297,10 +297,20 @@ process UPDATE_BENCHLING_WITH_VALIDATED_SITES {
     input:
         val project_id
         tuple val(sample_name), val(group), path(integration_csv)
+        val benchling_warehouse_username
+        val benchling_warehouse_password
+        val benchling_warehouse_url
+        val benchling_sdk_api_key
+        val benchling_api_url
     output:
 
     script:
     """
+    export WAREHOUSE_USERNAME='${benchling_warehouse_username}'
+    export WAREHOUSE_PASSWORD='${benchling_warehouse_password}'
+    export WAREHOUSE_URL='${benchling_warehouse_url}'
+    export API_KEY='${benchling_sdk_api_key}'
+    export API_URL='${benchling_api_url}'
     update_benchling_with_offtargets.py --project_id ${project_id} --integration_csv ${integration_csv}
     """
 }
@@ -547,7 +557,7 @@ workflow {
 
     measure_integration_out = MEASURE_INTEGRATION(measure_integration_input_ch)
 
-    UPDATE_BENCHLING_WITH_VALIDATED_SITES(params.project_id,measure_integration_out.integration_stats_file)
+    UPDATE_BENCHLING_WITH_VALIDATED_SITES(params.project_id,measure_integration_out.integration_stats_file,params.BENCHLING_WAREHOUSE_USERNAME,params.BENCHLING_WAREHOUSE_PASSWORD,params.BENCHLING_WAREHOUSE_URL,params.BENCHLING_API_KEY,params.BENCHLING_API_URL)
 
     trimmed_and_merged_fastq.fastp_stats
         .combine(initial_alignment.original_alignment_bam,by:[0,1])
