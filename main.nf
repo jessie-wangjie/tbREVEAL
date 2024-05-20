@@ -83,14 +83,14 @@ process DOWNLOAD_REFERENCE_GENOME {
         species_reference_fai_path = 's3://tomebfx-data/references/hg38_no_alts/hg38_no_alts.fa.fai'
         species_reference_pac_path = 's3://tomebfx-data/references/hg38_no_alts/hg38_no_alts.fa.pac'
         species_reference_sa_path = 's3://tomebfx-data/references/hg38_no_alts/hg38_no_alts.fa.sa'
-    } else if (reference_species == "Mouse") {
-        species_reference_fasta_path = 's3://tomebfx-data/references/hg38_no_alts/hg38_no_alts.fa'
-        species_reference_amb_path = 's3://tomebfx-data/references/hg38_no_alts/hg38_no_alts.fa.amb'
-        species_reference_ann_path = 's3://tomebfx-data/references/hg38_no_alts/hg38_no_alts.fa.ann'
-        species_reference_bwt_path = 's3://tomebfx-data/references/hg38_no_alts/hg38_no_alts.fa.bwt'
-        species_reference_fai_path = 's3://tomebfx-data/references/hg38_no_alts/hg38_no_alts.fa.fai'
-        species_reference_pac_path = 's3://tomebfx-data/references/hg38_no_alts/hg38_no_alts.fa.pac'
-        species_reference_sa_path = 's3://tomebfx-data/references/hg38_no_alts/hg38_no_alts.fa.sa'
+    } else if (reference_species == "Mouse" || reference_species == "Mus musculus") {
+        species_reference_fasta_path = 's3://tomebfx-data/references/mm39_and_rosa26_and_F9_insert/mm39_and_rosa26_and_F9_insert.fasta'
+        species_reference_amb_path = 's3://tomebfx-data/references/mm39_and_rosa26_and_F9_insert/mm39_and_rosa26_and_F9_insert.fasta.amb'
+        species_reference_ann_path = 's3://tomebfx-data/references/mm39_and_rosa26_and_F9_insert/mm39_and_rosa26_and_F9_insert.fasta.ann'
+        species_reference_bwt_path = 's3://tomebfx-data/references/mm39_and_rosa26_and_F9_insert/mm39_and_rosa26_and_F9_insert.fasta.bwt'
+        species_reference_fai_path = 's3://tomebfx-data/references/mm39_and_rosa26_and_F9_insert/mm39_and_rosa26_and_F9_insert.fasta.fai'
+        species_reference_pac_path = 's3://tomebfx-data/references/mm39_and_rosa26_and_F9_insert/mm39_and_rosa26_and_F9_insert.fasta.pac'
+        species_reference_sa_path = 's3://tomebfx-data/references/mm39_and_rosa26_and_F9_insert/mm39_and_rosa26_and_F9_insert.fasta.sa'
     } else if (reference_species == "Monkey" || reference_species == "Macaca fascicularis" || reference_species == "NHP") {
         species_reference_fasta_path = 's3://tomebfx-data/references/Macaca_fascicularis_6/GCA_011100615.1_Macaca_fascicularis_6.0_genomic.fna'
         species_reference_amb_path = 's3://tomebfx-data/references/Macaca_fascicularis_6/GCA_011100615.1_Macaca_fascicularis_6.0_genomic.fna.amb'

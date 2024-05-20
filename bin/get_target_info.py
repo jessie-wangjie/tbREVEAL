@@ -219,9 +219,6 @@ def get_target_info(cosmic_info,gtex_info,attp_name,reference_path,cargo_id, sam
             if '_' in chr:
                 continue
 
-            if 'chr' not in chr:
-                chr = 'chr' + chr
-
             query = '''
             SELECT
                 chr, start, spacer_off_target.end, strand, overlap_gene, overlap_gene_biotype, threat_tier
@@ -279,9 +276,6 @@ def get_target_info(cosmic_info,gtex_info,attp_name,reference_path,cargo_id, sam
 
             if '_' in chr:
                 continue
-
-            if 'chr' not in chr:
-                chr = 'chr' + chr
 
             query = '''
             SELECT
@@ -406,11 +400,8 @@ def get_target_info(cosmic_info,gtex_info,attp_name,reference_path,cargo_id, sam
             end = updated_df[updated_df.Target == id]['Stop'].iloc[0]
             strand = updated_df[updated_df.Target == id]['Strand'].iloc[0]
 
-            if '_' in chr:
+            if ('_' in chr) and ('rosa' not in chr):
                 continue
-
-            if 'chr' not in chr:
-                chr = 'chr' + chr
 
             query = '''
             SELECT

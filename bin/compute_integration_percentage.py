@@ -254,7 +254,7 @@ def compute_integration_percentage(target_info, alignment_dir, sample_name):
                             alignment_start <= 21
                             and alignment_end >= (21 + len(full_attb_sequence) - 1)
                         )
-                        and bool(re.search(full_attb_sequence, seq)) == False,
+                        and not bool(re.search(full_attb_sequence, seq)),
                         ["partial_beacon"],
                     ),
                     (
@@ -264,7 +264,7 @@ def compute_integration_percentage(target_info, alignment_dir, sample_name):
                             alignment_start <= 21
                             and alignment_end >= (21 + len(full_attb_sequence) - 1)
                         )
-                        and bool(re.search(full_attb_sequence, seq)) == True,
+                        and bool(re.search(full_attb_sequence, seq)),
                         ["complete_beacon"],
                     ),
                     (read.reference_name == "wt_amplicon", ["wt"]),
