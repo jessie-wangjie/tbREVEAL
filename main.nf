@@ -126,7 +126,7 @@ process GET_TARGET_INFORMATION {
 
     output:
         tuple val(sample_name), val(group), path("${sample_name}_target_info.csv"), emit: target_info
-        tuple val(sample_name), val(group), path("cargo.fasta"), emit: cargo_reference
+        tuple val(sample_name), val(group), val(cargo), path("cargo.fasta"), emit: cargo_reference
 
     script:
         """
@@ -137,6 +137,23 @@ process GET_TARGET_INFORMATION {
         export API_URL='${benchling_api_url}'
         get_target_info.py --probes_name "${probes_name}" --cosmic_info "${cosmic_info}" --gtex_info "${gtex_info}" --attp_name "${attp_name}" --reference "${reference_genome}" --cargo "${cargo}" --sample_name "${sample_name}"
         """
+}
+
+process GENERATE_REFERENCE_CARGO_GENOME {
+    input:
+        tuple val(cargo_name), path(reference_fasta)
+
+    output:
+        tuple val(cargo_name), path("*.{fa,fna,fasta}"), emit: reference_fasta
+        tuple val(cargo_name), path("*.{fa,fna,fasta}.*"), emit: reference_index
+
+    script:
+    """
+    python -c 'import sys; sys.path.append("${workflow.projectDir}/bin/"); import get_target_info;  get_target_info.download_cargo_genome("${cargo_name}")'
+    cat ${reference_fasta} cargo.fasta > ref_${cargo_name}.fa
+    bwa index -@ 32 ref_${cargo_name}.fa
+    samtools faidx ref_${cargo_name}.fa
+    """
 }
 
 process ADAPTER_AND_POLY_G_TRIM {
@@ -185,7 +202,7 @@ process ALIGN_READS {
     publishDir "${params.outdir}/deduped_alignments/${sample_name}/", pattern: '*_deduped_alignment.bam*'
 
     input:
-        tuple val(sample_name), val(group), val(umi_type), path(fastq), path(genome_reference), path(reference_index1),path(reference_index2),path(reference_index3),path(reference_index4),path(reference_index5),path(reference_index6),path(cargo_reference)
+        tuple val(sample_name), val(group), val(umi_type), path(fastq), val(cargo), path(genome_reference), path(reference_index)
         val initial_mapper
     output:
         tuple val(sample_name), val(group), path("${sample_name}_initial_alignment.bam"), path("${sample_name}_initial_alignment.bam.bai"), emit: original_alignment_bam
@@ -197,41 +214,21 @@ process ALIGN_READS {
     if (initial_mapper == "minimap2") {
         alignment_command = "minimap2 -ax sr -t 96 ${genome_reference} ${fastq}"
     } else if (initial_mapper == "bwa") {
-        alignment_command = "bwa mem -p -t 8 ${genome_reference} ${fastq}"
-        cargo_alignment_command = "bwa mem -t 8 ${cargo_reference}"
+        alignment_command = "bwa mem -p -t 32 ${genome_reference} ${fastq}"
     } else {
         error "Unsupported initial_mapper: $initial_mapper"
     }
     if (umi_type != "None") {
         """
+        # align in the single-end & paired-end mix mode -p
         $alignment_command > ${sample_name}_initial_alignment.sam
-
-        # single-end reads
-        samtools view -F1 ${sample_name}_initial_alignment.sam -b | samtools sort -@ 8 - -o ${sample_name}.se.genome.bam
-        samtools index ${sample_name}.se.genome.bam
-        umi_tools dedup -I ${sample_name}.se.genome.bam --umi-separator ":" -S ${sample_name}.se.genome.dedup.bam --method unique
-        samtools index ${sample_name}.se.genome.dedup.bam
-
-        # paired-end reads
-        samtools view -f1 ${sample_name}_initial_alignment.sam -b | samtools sort -@ 8 - -o ${sample_name}.pe.genome.bam
-
-        ## extract unmapped reads, then map to cargo
-        samtools fastq --rf 12 -F2304 ${sample_name}.pe.genome.bam -1 ${sample_name}.unmapped.R1.fastq.gz -2 ${sample_name}.unmapped.R2.fastq.gz
-        bwa index ${cargo_reference}
-        $cargo_alignment_command ${sample_name}.unmapped.R1.fastq.gz ${sample_name}.unmapped.R2.fastq.gz > ${sample_name}.pe.cargo.sam
-        samtools sort -@ 8 ${sample_name}.pe.cargo.sam -o ${sample_name}.pe.cargo.bam
-        samtools index ${sample_name}.pe.cargo.bam
-
-        ## merge reference and cargo bams
-        samtools merge ${sample_name}.pe.genome.bam ${sample_name}.pe.cargo.bam -o ${sample_name}.pe.genome.cargo.bam
-        umi_tools dedup -I ${sample_name}.pe.genome.cargo.bam --umi-separator ":" -S ${sample_name}.pe.genome.cargo.dedup.bam --method unique --paired
-        samtools index ${sample_name}.pe.genome.cargo.dedup.bam
-
-        # merge SE and PE results
-        samtools merge ${sample_name}.se.genome.bam ${sample_name}.pe.genome.bam -o ${sample_name}_initial_alignment.bam
+        samtools sort ${sample_name}_initial_alignment.sam -@ 32 -o ${sample_name}_initial_alignment.bam
         samtools index ${sample_name}_initial_alignment.bam
-        samtools merge ${sample_name}.se.genome.dedup.bam ${sample_name}.pe.genome.cargo.dedup.bam -o ${sample_name}_deduped_alignment.bam
+
+        # dedup in single-end mode
+        umi_tools dedup -I ${sample_name}_initial_alignment.bam --umi-separator ":" -S ${sample_name}_deduped_alignment.bam --method unique
         samtools index ${sample_name}_deduped_alignment.bam
+
         rm *.sam
         """
     } else {
@@ -428,22 +425,24 @@ process CREATE_QUILT_PACKAGE {
 process TRANSLOCATION_DETECTION {
     cache 'lenient'
     publishDir "${params.outdir}/translocation/"
+
     input:
-        tuple val(sample_name), val(group),path(target_info), path(cargo), path(bam_file), path(bam_file_index), path(reference_genome)
+        tuple val(sample_name), val(group), path(target_info), val(cargo_name), path(reference_genome), path(reference_index), path(bam_file), path(bam_file_index)
+
     output:
-        tuple val(sample_name), val(group), path("*.bnd.bed"), emit: bnd
+        tuple val(sample_name), val(group), path("*.bnd.bed"), path("*.cargo.bed"), emit: bnd
         path '*.vcf*'
+
     script:
     """
-    cat ${reference_genome} ${cargo} > combined_genomes.fasta
-    samtools faidx combined_genomes.fasta
-    delly call -g combined_genomes.fasta ${bam_file} -o ${sample_name}.delly.vcf -q 0 -r 0 -c 1 -z 0 -m 0 -t DEL,INV,BND &> log
-    bcftools query ${sample_name}.delly.vcf -i 'SVTYPE=\"BND\"' -f "%CHROM\\t%POS\\t%CHR2\\t%POS2\\t%ID\\t%PE\\t%SR\\n" > ${sample_name}.bnd.bed
-    bcftools query ${sample_name}.delly.vcf -i 'SVTYPE=\"INV\" || SVTYPE=\"DEL\"' -f "%CHROM\\t%POS\\t%CHROM\\t%END\\t%ID\\t%PE\\t%SR\\n" >> ${sample_name}.bnd.bed
+    # delly SV call
+    delly call -g ${reference_genome} ${bam_file} -o ${sample_name}.delly.vcf -q 0 -r 0 -c 1 -z 0 -m 0 -t DEL,INV,BND &> log
+    bcftools query ${sample_name}.delly.vcf -i 'SVTYPE="BND"' -f "%CHROM\\t%POS\\t%CHR2\\t%POS2\\t%ID\\t%PE\\t%SR\\n" > ${sample_name}.bnd.bed
+    bcftools query ${sample_name}.delly.vcf -i 'SVTYPE="INV" || SVTYPE="DEL"' -f "%CHROM\\t%POS\\t%CHROM\\t%END\\t%ID\\t%PE\\t%SR\\n" >> ${sample_name}.bnd.bed
 
     # extract the paired-end reads, one end mapped to reference, and one end to the cargo
-    cargo_name=`grep \\> ${cargo} | sed -e 's\/>\/\/'`
-    samtools view -e "(rname==$cargo_name || rnext==$cargo_name) &&  rname!=rnext" ${bam_file}
+    samtools view -f1 -F2304 ${bam_file} -e '(rname=="$cargo_name" || rnext=="$cargo_name") && rname!=rnext' -b -@ 10 > ${sample_name}.initial_alignment.cargo.bam
+    samtools sort -n ${sample_name}.initial_alignment.cargo.bam | bedtools bamtobed -bedpe | awk -F "\\t" '{ OFS="\\t"; split(\$7,f,":"); print \$4,\$5,\$6,f[length(f)] }' | sort -u | sort -k1,1 -k2,2n > ${sample_name}.cargo.bed
     """
 }
 
@@ -452,15 +451,24 @@ process INTERSECT_CAS_DATABASE {
 
     input:
         val dinucleotides
-        tuple val(sample_name), val(group), path(bnd_file)
+        tuple val(sample_name), val(group), path(bnd_file), path(cargo_file), val(species)
     output:
         path '*.cas.bed', emit: cas_bed
+        path '*.cargo.cas.csv', emit: cargo_cas_bed
 
     script:
     def args = dinucleotides == "" ? "": "--dinucleotides ${dinucleotides}"
     """
-    get_cas_info.py $args | sort -k1,1 -k2,2n | bedtools groupby -g 1,2,3 -c 4,5,6 -o distinct,distinct,distinct > CAS.cut.bed
-    awk -F \"\\t\" '{OFS=\"\\t\"; print \$1,\$2-1,\$2,\$5,\$6+\$7\"\\n\"\$3,\$4-1,\$4,\$5,\$6+\$7}' ${bnd_file} | sort -k1,1 -k2,2n | bedtools closest -a stdin -b CAS.cut.bed -d | awk -F \"\\t\" '{OFS=\"\\t\"; if(\$12<=10 && \$12>=0) print}' > ${sample_name}.bnd.cas.bed
+    get_cas_info.py --species $species $args | sort -k1,1 -k2,2n | bedtools groupby -g 1,2,3 -c 4,5,6 -o distinct,distinct,distinct > CAS.cut.bed
+    awk -F "\\t" '{OFS="\\t"; print \$1,\$2-1,\$2,\$5,\$6+\$7"\\n"\$3,\$4-1,\$4,\$5,\$6+\$7}' ${bnd_file} | sort -k1,1 -k2,2n | bedtools closest -a stdin -b CAS.cut.bed -d | awk -F "\\t" '{OFS="\\t"; if(\$12<=10 && \$12>=0) print}' > ${sample_name}.bnd.cas.bed
+
+    bedtools closest -a ${cargo_file} -b CAS.cut.bed -d | awk -F "\\t" '{OFS="\\t"; if(\$11>0 && \$11<=100) print }' > tmp
+    if [ -s tmp ]
+    then
+        sort -k8 tmp | bedtools groupby -g 8 -c 4 -o count > ${sample_name}.cargo.cas.csv
+    else
+        touch ${sample_name}.cargo.cas.csv
+    fi
     """
 }
 
@@ -536,12 +544,24 @@ workflow {
 
     amplicon_files = GENERATE_AMPLICONS(probe_information.target_info)
 
-    trimmed_and_merged_fastq.trimmed_fastq
+    // generate ref and cargo reference
+    probe_information.cargo_reference.map { it[2] }
+        .unique()
         .combine(reference_genome.reference_fasta)
-        .combine(reference_genome.reference_index)
-        .combine(probe_information.cargo_reference,by:[0,1])
-        .set{align_reads_input_ch}
+        .set { cargo_ch }
+    cargo_ch.view()
+    reference_cargo_genome = GENERATE_REFERENCE_CARGO_GENOME(cargo_ch)
 
+    probe_information.cargo_reference
+        .map { [it[2], it[0], it[1]] }
+        .combine(reference_cargo_genome.reference_fasta, by:[0])
+        .combine(reference_cargo_genome.reference_index, by:[0])
+        .map { [it[1], it[2], it[0], it[3], it[4]]}
+        .set { ref_ch }
+
+    trimmed_and_merged_fastq.trimmed_fastq
+        .combine(ref_ch, by:[0,1])
+        .set{align_reads_input_ch}
     initial_alignment = ALIGN_READS(align_reads_input_ch, params.initial_mapper)
 
     probe_information.target_info
@@ -619,14 +639,16 @@ workflow {
 
     // ** TRANSLOCATION DETECTION **
     probe_information.target_info
-        .combine(probe_information.cargo_reference, by: [0,1])
-        .combine(initial_alignment.deduped_alignment_bam, by: [0,1])
-        .combine(reference_genome.reference_fasta)
+        .combine(ref_ch, by: [0,1])
+        .combine(initial_alignment.original_alignment_bam, by: [0,1])
         .set{translocation_detection_input_ch}
-
     TRANSLOCATION_DETECTION(translocation_detection_input_ch)
 
-    intersect_cas_database_out = INTERSECT_CAS_DATABASE(params.dinucleotides, TRANSLOCATION_DETECTION.out.bnd)
+    TRANSLOCATION_DETECTION.out.bnd
+        .combine(unique_species_ch)
+        .set { bnd_ch }
+    bnd_ch.view()
+    intersect_cas_database_out = INTERSECT_CAS_DATABASE(params.dinucleotides, bnd_ch)
 
     // ** CREATE HTML REPORT **
 

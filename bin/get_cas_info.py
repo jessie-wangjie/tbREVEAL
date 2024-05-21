@@ -8,12 +8,11 @@ import sys
 
 
 def reverse_complement(seq):
-    complement = {'A': 'T', 'C': 'G', 'G': 'C', 'T': 'A','N':'N'}
+    complement = {'A': 'T', 'C': 'G', 'G': 'C', 'T': 'A', 'N': 'N'}
     return "".join(complement[base] for base in reversed(seq))
 
 
-def get_cas_info(dinucleotides):
-
+def get_cas_info(dinucleotides, species):
     query = '''
             SELECT
                 chr,
@@ -24,6 +23,7 @@ def get_cas_info(dinucleotides):
                 threat_tier
             FROM
                 integrase_cryptic_attachment_site
+            where species = %s
             '''
 
     if dinucleotides != "":
@@ -33,13 +33,15 @@ def get_cas_info(dinucleotides):
             di.add("central_nucleotides_seq = '" + reverse_complement(i) + "'")
 
         query += '''
-            WHERE
+            and 
                 ''' + " or ".join(di)
-
-    cur.execute(query, [dinucleotides])
+        cur.execute(query, [species.lower(), dinucleotides])
+    else:
+        cur.execute(query, [species.lower()])
 
     for row in cur.fetchall():
         print("\t".join(str(i) for i in row))
+
 
 if __name__ == "__main__":
     # Create the parser
@@ -47,6 +49,8 @@ if __name__ == "__main__":
 
     # Add the arguments
     parser.add_argument("--dinucleotides", required=False, type=str, help="Metadata file", default="")
+    parser.add_argument("--species", required=False, type=str, help="species", default="human")
     # Parse the arguments
     args = parser.parse_args()
-    get_cas_info(args.dinucleotides)
+    get_cas_info(args.dinucleotides, args.species)
+

@@ -2,9 +2,9 @@ import psycopg2
 import os
 from benchling_sdk.auth.api_key_auth import ApiKeyAuth
 from benchling_sdk.benchling import Benchling
-# from dotenv import load_dotenv
+from dotenv import load_dotenv
 
-# load_dotenv()
+load_dotenv()
 
 username = os.getenv('WAREHOUSE_USERNAME')
 password = os.getenv('WAREHOUSE_PASSWORD')
