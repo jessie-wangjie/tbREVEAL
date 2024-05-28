@@ -87,13 +87,8 @@ def compute_integration_percentage(target_info, alignment_dir, sample_name):
             full_attb_sequence = ""
 
         categories = {
-            "ambiguous_attL": set(),
-            "ambiguous_attR": set(),
             "complete_attL": set(),
-            "cargo_attL": set(),
             "complete_attR": set(),
-            "cargo_attR": set(),
-            "ambiguous_beacon": set(),
             "partial_beacon": set(),
             "complete_beacon": set(),
             "wt": set(),
@@ -134,12 +129,7 @@ def compute_integration_percentage(target_info, alignment_dir, sample_name):
                 )
 
                 rules = [
-                    (
-                        read.reference_name == "attL_amplicon"
-                        and "CAS" in row["id"]
-                        and (alignment_start <= 21 and 45 <= alignment_end < 69),
-                        ["ambiguous_attL"],
-                    ),
+                    ## CAS
                     (
                         read.reference_name == "attL_amplicon"
                         and "CAS" in row["id"]
@@ -149,45 +139,12 @@ def compute_integration_percentage(target_info, alignment_dir, sample_name):
                         ["complete_attL"],
                     ),
                     (
-                        read.reference_name == "attL_amplicon"
-                        and "CAS" in row["id"]
-                        and alignment_start <= 21
-                        and alignment_end >= 79
-                        and p_prime_sequence in seq,
-                        ["complete_attL", "cargo_attL"],
-                    ),
-                    (
-                        read.reference_name == "attR_amplicon"
-                        and "CAS" in row["id"]
-                        and (21 < alignment_start <= 45 and alignment_end >= 69),
-                        ["ambiguous_attR"],
-                    ),
-                    (
                         read.reference_name == "attR_amplicon"
                         and "CAS" in row["id"]
                         and alignment_start <= 21
                         and alignment_end >= 69
                         and p_reg_sequence in seq,
                         ["complete_attR"],
-                    ),
-                    (
-                        read.reference_name == "attR_amplicon"
-                        and "CAS" in row["id"]
-                        and alignment_start <= 11
-                        and alignment_end >= 69
-                        and p_reg_sequence in seq,
-                        ["complete_attR", "cargo_attR"],
-                    ),
-                    (
-                        read.reference_name == "beacon_amplicon"
-                        and "CAS" in row["id"]
-                        and (
-                            21 < alignment_start <= 66
-                            or 21 <= alignment_end < 66
-                            or (alignment_start == 21 and alignment_end < 66)
-                            or (alignment_start > 21 and alignment_end == 66)
-                        ),
-                        ["ambiguous_beacon"],
                     ),
                     (
                         read.reference_name == "beacon_amplicon"
@@ -196,14 +153,7 @@ def compute_integration_percentage(target_info, alignment_dir, sample_name):
                         and alignment_end >= 66,
                         ["complete_beacon"],
                     ),
-                    # slightly different rule compared to CAS sites because cryptic B based on 46 bp attB and the beacon written is 38 bp
-                    # note the difference in alignment ends (15 bp versus 11 bp)
-                    (
-                        read.reference_name == "attL_amplicon"
-                        and "AA" in row["id"]
-                        and (alignment_start <= 21 or 40 <= alignment_end < 64),
-                        ["ambiguous_attL"],
-                    ),
+                    # AA
                     (
                         read.reference_name == "attL_amplicon"
                         and "AA" in row["id"]
@@ -212,40 +162,11 @@ def compute_integration_percentage(target_info, alignment_dir, sample_name):
                         ["complete_attL"],
                     ),
                     (
-                        read.reference_name == "attL_amplicon"
-                        and "AA" in row["id"]
-                        and (alignment_start <= 21 and alignment_end >= 75)
-                        and p_prime_sequence in seq,
-                        ["complete_attL", "cargo_attL"],
-                    ),
-                    (
-                        read.reference_name == "attR_amplicon"
-                        and "AA" in row["id"]
-                        and (21 < alignment_start <= 45 or alignment_end >= 65),
-                        ["ambiguous_attR"],
-                    ),
-                    (
                         read.reference_name == "attR_amplicon"
                         and "AA" in row["id"]
                         and (alignment_start <= 21 and alignment_end >= 65)
                         and p_reg_sequence in seq,
                         ["complete_attR"],
-                    ),
-                    (
-                        read.reference_name == "attR_amplicon"
-                        and "AA" in row["id"]
-                        and (alignment_start <= 11 and alignment_end >= 65)
-                        and p_reg_sequence in seq,
-                        ["complete_attR", "cargo_attR"],
-                    ),
-                    (
-                        read.reference_name == "beacon_amplicon"
-                        and "AA" in row["id"]
-                        and (
-                            alignment_start > 21
-                            or alignment_end < (21 + len(full_attb_sequence))
-                        ),
-                        ["ambiguous_beacon"],
                     ),
                     (
                         read.reference_name == "beacon_amplicon"
@@ -319,12 +240,9 @@ def compute_integration_percentage(target_info, alignment_dir, sample_name):
 
         counts = {k: len(v) for k, v in categories.items()}
 
-        partial_att_max = max(counts["ambiguous_attL"], counts["ambiguous_attR"])
         complete_att_max = max(counts["complete_attL"], counts["complete_attR"])
-        cargo_att_max = max(counts["cargo_attL"], counts["cargo_attR"])
         complete_beacon_total = counts["complete_beacon"]
         partial_beacon_total = counts["partial_beacon"]
-        ambiguous_beacon_total = counts["ambiguous_beacon"]
         wt_total = counts["wt"]
 
         total_conversion_percentage = 0
@@ -340,20 +258,6 @@ def compute_integration_percentage(target_info, alignment_dir, sample_name):
                 100 * (complete_att_max) / (complete_att_max + complete_beacon_total)
             )
         if (
-            partial_att_max + complete_beacon_total + partial_beacon_total + wt_total
-            != 0
-        ):
-            total_partial_PGI_percentage = (
-                100
-                * (partial_att_max)
-                / (
-                    partial_att_max
-                    + complete_beacon_total
-                    + partial_beacon_total
-                    + wt_total
-                )
-            )
-        if (
             complete_att_max + complete_beacon_total + partial_beacon_total + wt_total
             != 0
         ):
@@ -362,17 +266,6 @@ def compute_integration_percentage(target_info, alignment_dir, sample_name):
                 * (complete_att_max)
                 / (
                     complete_att_max
-                    + complete_beacon_total
-                    + partial_beacon_total
-                    + wt_total
-                )
-            )
-        if cargo_att_max + complete_beacon_total + partial_beacon_total + wt_total != 0:
-            total_cargo_PGI_percentage = (
-                100
-                * (cargo_att_max)
-                / (
-                    cargo_att_max
                     + complete_beacon_total
                     + partial_beacon_total
                     + wt_total
@@ -427,20 +320,14 @@ def compute_integration_percentage(target_info, alignment_dir, sample_name):
 
         integration_dict[row["id"]] = (
             counts["wt"],
-            counts["ambiguous_attL"],
             counts["complete_attL"],
-            counts["cargo_attL"],
-            counts["ambiguous_attR"],
             counts["complete_attR"],
-            counts["cargo_attR"],
-            counts["ambiguous_beacon"],
+            complete_att_max,
             counts["partial_beacon"],
             counts["complete_beacon"],
             indel_counter,
             informative_reads,
-            total_partial_PGI_percentage,
             total_complete_PGI_percentage,
-            total_cargo_PGI_percentage,
             total_beacon_percentage,
             complete_beacon_percentage,
             beacon_fidelity_percentage,
@@ -468,13 +355,13 @@ def write_integration_percentage(integration_dict, sample_name):
     with open(filename, "w") as file:
         # Write the header row
         file.write(
-            "Target,Number of WT Reads,Number of AttL Partial Reads,Number of AttL Complete Reads,Number of AttL Cargo Reads,Number of AttR Partial Reads,Number of AttR Complete Reads,Number of AttR Cargo Reads,Number of Ambiguous Beacon Reads,Number of Partial Beacon Reads,Number of Complete Beacon Reads,Number of Indel Reads,Number of Informative Reads,Partial P Integration Percentage,Complete P Integration Percentage,Cargo and P Integration Percentage,Partial Beacon Placement,Complete Beacon Placement,Beacon Fidelity,Indels,Closest Gene Name,Gene Strand,Distance from Gene,Same Strand as Cryptic,Overlapping Feature,Threat Tier,Cosmic Gene,Role in Cancer,Liver Expression (TPM)\n"
+            "Target,Number of WT Reads,Number of AttL Reads,Number of AttR Reads,Max Recombined Reads,Number of Partial Beacon Reads,Number of Complete Beacon Reads,Number of Indel Reads,Number of Informative Reads,Integration Percentage,Partial Beacon Placement,Complete Beacon Placement,Beacon Fidelity,Indels,Closest Gene Name,Gene Strand,Distance from Gene,Same Strand as Cryptic,Overlapping Feature,Threat Tier,Cosmic Gene,Role in Cancer,Liver Expression (TPM)\n"
         )
 
         # Write the data rows
         for key, value in integration_dict.items():
             file.write(
-                f"{key},{value[0]},{value[1]},{value[2]},{value[3]},{value[4]},{value[5]},{value[6]},{value[7]},{value[8]},{value[9]},{value[10]},{value[11]},{value[12]},{value[13]},{value[14]},{value[15]},{value[16]},{value[17]},{value[18]},{value[19]},{value[20]},{value[21]},{value[22]},{value[23]},{value[24]},{value[25]},{value[26]},{value[27]}\n"
+                f"{key},{value[0]},{value[1]},{value[2]},{value[3]},{value[4]},{value[5]},{value[6]},{value[7]},{value[8]},{value[9]},{value[10]},{value[11]},{value[12]},{value[13]},{value[14]},{value[15]},{value[16]},{value[17]},{value[18]},{value[19]},{value[20]},{value[21]}\n"
             )
 
 

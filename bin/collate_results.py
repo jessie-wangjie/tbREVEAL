@@ -30,9 +30,7 @@ def count_fastq_reads(directory):
     return total_reads
 
 
-def collate_integration_files(
-    project_info, integration_stats_filenames, project_name, collapse_condition
-):
+def collate_integration_files(project_info, integration_stats_filenames, project_name):
     project_info_df = pd.read_csv(project_info)
 
     # Dictionary initialization
@@ -58,11 +56,8 @@ def collate_integration_files(
             df["Fidelity Percentage"] = (
                 100 * df["Complete Beacon Placement"] / df["Partial Beacon Placement"]
             )
-            df["Max Complete Recombination"] = df[
-                ["Number of AttL Complete Reads", "Number of AttR Complete Reads"]
-            ].max(axis=1)
-            df["Max Cargo Recombination"] = df[
-                ["Number of AttL Cargo Reads", "Number of AttR Cargo Reads"]
+            df["Max Recombination"] = df[
+                ["Number of AttL Reads", "Number of AttR Reads"]
             ].max(axis=1)
 
             # Define the base columns
@@ -90,41 +85,14 @@ def collate_integration_files(
                 or "Indels" in col
             ]
             reads_cols = [col for col in df.columns if "Reads" in col or "reads" in col]
-            if collapse_condition == "Complete":
-                integration_short_cols = [
-                    col
-                    for col in df.columns
-                    if "Complete P Integration Percentage" in col
-                    or "Complete Reads" in col
-                    or "Complete Beacon Reads"
-                    or "Partial Beacon Reads" in col
-                    or "WT Reads" in col
-                    or "Max Complete Recombination" in col
-                    or "Informative Reads" in col
-                ]
-            elif collapse_condition == "Partial":
-                integration_short_cols = [
-                    col
-                    for col in df.columns
-                    if "Partial P Integration Percentage" in col
-                    or "Partial Reads" in col
-                    or "Partial Beacon Reads" in col
-                    or "WT Reads" in col
-                    or "Max Partial Recombination" in col
-                    or "Informative Reads" in col
-                ]
-            elif collapse_condition == "Cargo":
-                integration_short_cols = [
-                    col
-                    for col in df.columns
-                    if "Cargo and P Integration Percentage" in col
-                    or "Cargo Reads" in col
-                    or "Complete Beacon Reads" in col
-                    or "Partial Beacon Reads" in col
-                    or "WT Reads" in col
-                    or "Max Cargo Recombination" in col
-                    or "Informative Reads" in col
-                ]
+
+            integration_short_cols = [
+                col
+                for col in df.columns
+                if "Integration Percentage" in col
+                or "Reads" in col
+                or "Max Recombination" in col
+            ]
 
             # Rename columns to include sample name
             renamed_integration_cols = [
@@ -195,14 +163,10 @@ def collate_integration_files(
     for key in merged_short_integration_dfs:
         temp_df = pd.concat(merged_short_integration_dfs[key], axis=1)
         temp_df = pd.concat([base_columns_df, temp_df], axis=1)
-        attL_total = temp_df.filter(like=f"AttL {collapse_condition}").sum(axis=1)
-        attR_total = temp_df.filter(like=f"AttR {collapse_condition}").sum(axis=1)
+        attL_total = temp_df.filter(like="AttL Reads").sum(axis=1)
+        attR_total = temp_df.filter(like="AttR Reads").sum(axis=1)
         indel_total = temp_df.filter(like="Number of Indel Reads").sum(axis=1)
-
-        att_max_total = temp_df.filter(
-            like=f"Max {collapse_condition} Recombination"
-        ).sum(axis=1)
-
+        att_max_total = temp_df.filter(like="Max Recombined Reads").sum(axis=1)
         partial_beacon_total = temp_df.filter(like="Partial Beacon Reads").sum(axis=1)
         complete_beacon_total = temp_df.filter(like="Complete Beacon Reads").sum(axis=1)
         wt_total = temp_df.filter(like="WT Reads").sum(axis=1)
@@ -393,12 +357,6 @@ if __name__ == "__main__":
     parser.add_argument(
         "--extracted_reads_dirs", nargs="+", required=True, help="Extracted reads dirs"
     )
-    parser.add_argument(
-        "--collapse_condition_by",
-        help="Collapse by PARTIAL P, COMPLETE P, or CARGO?",
-        default="Complete",
-        choices=["Partial", "Complete", "Cargo"],
-    )
 
     args = parser.parse_args()
 
@@ -408,7 +366,6 @@ if __name__ == "__main__":
         args.project_config_file,
         args.integration_stats_files,
         args.project_name,
-        args.collapse_condition_by,
     )
     collate_reads_per_site_files(
         args.project_config_file, args.read_counts_per_site_files, integration_fn
