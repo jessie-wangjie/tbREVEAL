@@ -276,19 +276,19 @@ def compute_integration_percentage(target_info, alignment_dir, sample_name):
                     if condition:
                         for key in cat_keys:
                             categories[key].add(umi)
-                            if "attL" in key:
+                            if "complete_attL" in key:
                                 attL_records[umi] = seq_record
                                 if has_indel_in_range(
                                     read, beacon_quant_lower, beacon_quant_upper
                                 ):
                                     indel_counter += 1
-                            elif "attR" in key:
+                            elif "complete_attR" in key:
                                 attR_records[umi] = seq_record
                                 if has_indel_in_range(
                                     read, beacon_quant_lower, beacon_quant_upper
                                 ):
                                     indel_counter += 1
-                            elif "beacon" in key and "AA" in row["id"]:
+                            elif "complete_beacon" in key and "AA" in row["id"]:
                                 beacon_records[umi] = seq_record
                                 if has_indel_in_range(
                                     read, beacon_quant_lower, beacon_quant_upper
