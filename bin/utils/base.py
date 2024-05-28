@@ -10,7 +10,7 @@ username = os.getenv('WAREHOUSE_USERNAME')
 password = os.getenv('WAREHOUSE_PASSWORD')
 url = os.getenv('WAREHOUSE_URL')
 
-conn = psycopg2.connect(dbname="warehouse", user=username, password=password, port=5432, sslmode='verify-ca', host=url, connect_timeout=0)
+conn = psycopg2.connect(dbname="warehouse", user="u$jwang_4c", password="LIUesxz2XeC49QXW", port=5432, sslmode='verify-ca', host="postgres-warehouse.tome.benchling.com", connect_timeout=0)
 cur = conn.cursor()
 
 api_key = os.getenv('API_KEY')

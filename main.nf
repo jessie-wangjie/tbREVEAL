@@ -140,18 +140,19 @@ process GET_TARGET_INFORMATION {
 }
 
 process GENERATE_REFERENCE_CARGO_GENOME {
+    cache 'lenient'
     input:
         tuple val(cargo_name), path(reference_fasta)
 
     output:
-        tuple val(cargo_name), path("*.{fa,fna,fasta}"), emit: reference_fasta
+        tuple val(cargo_name), path("ref_${cargo_name}.fa"), emit: reference_fasta
         tuple val(cargo_name), path("*.{fa,fna,fasta}.*"), emit: reference_index
 
     script:
     """
     python -c 'import sys; sys.path.append("${workflow.projectDir}/bin/"); import get_target_info;  get_target_info.download_cargo_genome("${cargo_name}")'
     cat ${reference_fasta} cargo.fasta > ref_${cargo_name}.fa
-    bwa index -@ 32 ref_${cargo_name}.fa
+    bwa index ref_${cargo_name}.fa
     samtools faidx ref_${cargo_name}.fa
     """
 }
@@ -167,7 +168,7 @@ process ADAPTER_AND_POLY_G_TRIM {
     output:
         path "${R1}"
         path "${R2}"
-        tuple val(sample_name), val(group), val(umi_type), path("${sample_name}_trimmed.fastq.gz"), emit: trimmed_fastq
+        tuple val(sample_name), val(group), val(umi_type), path("${sample_name}_trimmed.fastq.gz"), path("${sample_name}_unmerged.R1.fastq.gz"), path("${sample_name}_unmerged.R2.fastq.gz"), emit: trimmed_fastq
         tuple val(sample_name), val(group), path("${sample_name}_fastp.json"), emit: fastp_stats
     script:
         umi_loc = ''
@@ -192,7 +193,8 @@ process ADAPTER_AND_POLY_G_TRIM {
             umi_params = ""
         }
         """
-        fastp -m -c --dont_eval_duplication --disable_adapter_trimming --low_complexity_filter --overlap_len_require 10 -i ${R1} -I ${R2} --merged_out ${sample_name}_trimmed.fastq.gz --include_unmerged -w 16 -g -j ${sample_name}_fastp.json -U ${umi_params} --adapter_sequence AGATCGGAAGAGCACACGTCTGAACTCCAGTCA --adapter_sequence_r2 AGATCGGAAGAGCGTCGTGTAGGGAAAGAGTGT
+        fastp -m -c --dont_eval_duplication --disable_adapter_trimming --low_complexity_filter --overlap_len_require 10 -i ${R1} -I ${R2} --merged_out ${sample_name}_merged.fastq.gz --out1 ${sample_name}_unmerged.R1.fastq.gz --out2 ${sample_name}_unmerged.R2.fastq.gz --unpaired1 ${sample_name}_unpaired.fastq.gz --unpaired2 ${sample_name}_unpaired.fastq.gz -w 16 -g -j ${sample_name}_fastp.json -U ${umi_params} --adapter_sequence AGATCGGAAGAGCACACGTCTGAACTCCAGTCA --adapter_sequence_r2 AGATCGGAAGAGCGTCGTGTAGGGAAAGAGTGT
+        zcat ${sample_name}_merged.fastq.gz ${sample_name}_unpaired.fastq.gz | gzip > ${sample_name}_trimmed.fastq.gz
         """
 }
 
@@ -202,7 +204,7 @@ process ALIGN_READS {
     publishDir "${params.outdir}/deduped_alignments/${sample_name}/", pattern: '*_deduped_alignment.bam*'
 
     input:
-        tuple val(sample_name), val(group), val(umi_type), path(fastq), val(cargo), path(genome_reference), path(reference_index)
+        tuple val(sample_name), val(group), val(umi_type), path(merged_fastq), path(unmerged_r1), path(unmerged_r2), val(cargo), path(genome_reference), path(reference_index)
         val initial_mapper
     output:
         tuple val(sample_name), val(group), path("${sample_name}_initial_alignment.bam"), path("${sample_name}_initial_alignment.bam.bai"), emit: original_alignment_bam
@@ -214,15 +216,21 @@ process ALIGN_READS {
     if (initial_mapper == "minimap2") {
         alignment_command = "minimap2 -ax sr -t 96 ${genome_reference} ${fastq}"
     } else if (initial_mapper == "bwa") {
-        alignment_command = "bwa mem -p -t 32 ${genome_reference} ${fastq}"
+        alignment_command = "bwa mem -t 32 ${genome_reference}"
     } else {
         error "Unsupported initial_mapper: $initial_mapper"
     }
     if (umi_type != "None") {
         """
-        # align in the single-end & paired-end mix mode -p
-        $alignment_command > ${sample_name}_initial_alignment.sam
-        samtools sort ${sample_name}_initial_alignment.sam -@ 32 -o ${sample_name}_initial_alignment.bam
+        # align single-end reads
+        $alignment_command ${merged_fastq} > ${sample_name}_merged.sam
+        samtools sort ${sample_name}_merged.sam -@ 16 -o ${sample_name}_merged.bam
+        # align paired-end
+        $alignment_command ${unmerged_r1} ${unmerged_r2} > ${sample_name}_unmerged.sam
+        samtools sort ${sample_name}_unmerged.sam -@ 16 -o ${sample_name}_unmerged.bam
+
+        # merge
+        samtools merge ${sample_name}_merged.bam ${sample_name}_unmerged.bam -o ${sample_name}_initial_alignment.bam
         samtools index ${sample_name}_initial_alignment.bam
 
         # dedup in single-end mode
@@ -450,19 +458,18 @@ process INTERSECT_CAS_DATABASE {
     publishDir "${params.outdir}/translocation/"
 
     input:
-        val dinucleotides
-        tuple val(sample_name), val(group), path(bnd_file), path(cargo_file), val(species)
+        tuple val(sample_name), val(group), path(target_info), path(bnd_file), path(cargo_file)
     output:
         path '*.cas.bed', emit: cas_bed
         path '*.cargo.cas.csv', emit: cargo_cas_bed
 
     script:
-    def args = dinucleotides == "" ? "": "--dinucleotides ${dinucleotides}"
     """
-    get_cas_info.py --species $species $args | sort -k1,1 -k2,2n | bedtools groupby -g 1,2,3 -c 4,5,6 -o distinct,distinct,distinct > CAS.cut.bed
-    awk -F "\\t" '{OFS="\\t"; print \$1,\$2-1,\$2,\$5,\$6+\$7"\\n"\$3,\$4-1,\$4,\$5,\$6+\$7}' ${bnd_file} | sort -k1,1 -k2,2n | bedtools closest -a stdin -b CAS.cut.bed -d | awk -F "\\t" '{OFS="\\t"; if(\$12<=10 && \$12>=0) print}' > ${sample_name}.bnd.cas.bed
+    cut -f1 -d "," $target_info | grep -v id | sort -u > CAS.list
+    get_cas_info.py --cas CAS.list | sort -k1,1 -k2,2n | bedtools groupby -g 1,2,3 -c 4 -o distinct -delim "_" > CAS.cut.bed
+    awk -F "\\t" '{OFS="\\t"; print \$1,\$2-1,\$2,\$5,\$6+\$7"\\n"\$3,\$4-1,\$4,\$5,\$6+\$7}' ${bnd_file} | sort -k1,1 -k2,2n | bedtools closest -a stdin -b CAS.cut.bed -d | awk -F "\\t" '{OFS="\\t"; if(\$10<=5 && \$10>=0) print}' > ${sample_name}.bnd.cas.bed
 
-    bedtools closest -a ${cargo_file} -b CAS.cut.bed -d | awk -F "\\t" '{OFS="\\t"; if(\$11>0 && \$11<=100) print }' > tmp
+    bedtools closest -a ${cargo_file} -b CAS.cut.bed -d | awk -F "\\t" '{OFS="\\t"; if(\$9>0 && \$9<=100) print }' > tmp
     if [ -s tmp ]
     then
         sort -k8 tmp | bedtools groupby -g 8 -c 4 -o count > ${sample_name}.cargo.cas.csv
@@ -549,7 +556,6 @@ workflow {
         .unique()
         .combine(reference_genome.reference_fasta)
         .set { cargo_ch }
-    cargo_ch.view()
     reference_cargo_genome = GENERATE_REFERENCE_CARGO_GENOME(cargo_ch)
 
     probe_information.cargo_reference
@@ -644,11 +650,10 @@ workflow {
         .set{translocation_detection_input_ch}
     TRANSLOCATION_DETECTION(translocation_detection_input_ch)
 
-    TRANSLOCATION_DETECTION.out.bnd
-        .combine(unique_species_ch)
-        .set { bnd_ch }
-    bnd_ch.view()
-    intersect_cas_database_out = INTERSECT_CAS_DATABASE(params.dinucleotides, bnd_ch)
+    probe_information.target_info
+        .combine(TRANSLOCATION_DETECTION.out.bnd, by: [0,1])
+        .set{target_info_and_bnd_ch}
+    intersect_cas_database_out = INTERSECT_CAS_DATABASE(target_info_and_bnd_ch)
 
     // ** CREATE HTML REPORT **
 
