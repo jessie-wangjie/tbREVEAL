@@ -10,7 +10,7 @@ import argparse
 def add_sites(project_id, integration_csv_fn):
 
     integration_df = pd.read_csv(integration_csv_fn,sep=',')
-    validated_sites = list(integration_df[integration_df['Complete P Integration Percentage'] > 0].Target)
+    validated_sites = list(integration_df[integration_df['Integration Percentage'] > 0].Target)
     benchling = Benchling(url="https://tome.benchling.com", auth_method=ApiKeyAuth(api_key))
     for cas_id in validated_sites:
         if 'CAS' not in cas_id:

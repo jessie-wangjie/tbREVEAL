@@ -2,7 +2,6 @@ nextflow.enable.dsl=2
 
 
 params.outdir = "output"
-params.collapse_condition = 'Complete'
 params.initial_mapper = 'bwa'
 params.notebook_template = "${workflow.projectDir}/bin/report_generation.ipynb"
 params.bam2html_path = "${workflow.projectDir}/bin/utils/bam2html.py"
@@ -354,7 +353,6 @@ process GENERATE_REPORT {
         path read_counts_per_site_files
         path qc_summary_files
         path extracted_reads
-        val collapse_condition
         val project_name
     output:
         path "*.xlsx", emit: excel_output
@@ -362,7 +360,7 @@ process GENERATE_REPORT {
     script:
         """
         ulimit -s 65536
-        collate_results.py --project_config_file ${project_config_file} --integration_stats_files ${integration_stats_files} --read_counts_per_site_files ${read_counts_per_site_files} --qc_summary_files ${qc_summary_files} --extracted_reads_dirs ${extracted_reads} --collapse_condition ${collapse_condition} --project_name ${project_name}
+        collate_results.py --project_config_file ${project_config_file} --integration_stats_files ${integration_stats_files} --read_counts_per_site_files ${read_counts_per_site_files} --qc_summary_files ${qc_summary_files} --extracted_reads_dirs ${extracted_reads} --project_name ${project_name}
         """
     }
 
@@ -481,7 +479,6 @@ workflow {
          initial mapper: ${params.initial_mapper}
          attP, left side: ${params.ATTP_REG}
          attP, right side: ${params.ATTP_PRIME}
-         collapse condition: ${params.collapse_condition}
          --
          run as       : ${workflow.commandLine}
          started at   : ${workflow.start}
@@ -600,7 +597,7 @@ workflow {
         .collect()
         .set{extracted_reads_files_ch}
 
-    report_excel_file = GENERATE_REPORT(samplesheet,integration_stats_files_ch,read_counts_per_site_files_ch,qc_summary_files_ch,extracted_reads_files_ch, params.collapse_condition, params.project_id)
+    report_excel_file = GENERATE_REPORT(samplesheet,integration_stats_files_ch,read_counts_per_site_files_ch,qc_summary_files_ch,extracted_reads_files_ch, params.project_id)
 
     // ** MULTIQC REPORT **
     trimmed_and_merged_fastq.fastp_stats
