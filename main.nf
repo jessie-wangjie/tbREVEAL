@@ -115,7 +115,7 @@ process GET_TARGET_INFORMATION {
     cache 'lenient'
     publishDir "${params.outdir}/full_probe_info/${sample_name}/"
     input:
-        tuple val(sample_name),val(species),path(R1), path(R2), val(attb_name), val(attp_name),val(umi_type),val(probes_name),val(cargo),val(group),path(reference_genome), path(reference_index1),path(reference_index2),path(reference_index3),path(reference_index4),path(reference_index5),path(reference_index6)
+        tuple val(sample_name), val(species), path(R1), path(R2), val(attb_name), val(attp_name), val(umi_type), val(probes_name), val(cargo), val(group), path(reference_genome), path(reference_index)
         path cosmic_info
         path gtex_info
         val benchling_warehouse_username
@@ -142,26 +142,28 @@ process GET_TARGET_INFORMATION {
 process GENERATE_REFERENCE_CARGO_GENOME {
     cache 'lenient'
     input:
-        tuple val(cargo_name), path(reference_fasta)
+        each cargo_name
+        path reference_fasta
 
     output:
-        tuple val(cargo_name), path("ref_${cargo_name}.fa"), emit: reference_fasta
+        tuple val(cargo_name), path("ref_*.fa"), emit: reference_fasta
         tuple val(cargo_name), path("*.{fa,fna,fasta}.*"), emit: reference_index
 
     script:
     """
-    python -c 'import sys; sys.path.append("${workflow.projectDir}/bin/"); import get_target_info;  get_target_info.download_cargo_genome("${cargo_name}")'
-    cat ${reference_fasta} cargo.fasta > ref_${cargo_name}.fa
-    bwa index ref_${cargo_name}.fa
-    samtools faidx ref_${cargo_name}.fa
+    get_cargo_seq.py --cargo "${cargo_name}"
+    cargo_id=`grep \\> cargo.fasta | sed -e 's/>//'`
+    cat ${reference_fasta} cargo.fasta > ref_\${cargo_id}.fa
+    bwa index ref_\${cargo_id}.fa
+    samtools faidx ref_\${cargo_id}.fa
     """
 }
 
 process ADAPTER_AND_POLY_G_TRIM {
     cache 'lenient'
-    publishDir "${params.outdir}/raw_fastq/${sample_name}/", pattern: '*.fastq.gz'
+    publishDir "${params.outdir}/raw_fastq/${sample_name}/", pattern: '*_R[1|2]_*.fastq.gz'
     publishDir "${params.outdir}/trimmed_fastq/${sample_name}/", pattern: '*trimmed*.fastq.gz'
-    publishDir "${params.outdir}/input_probe_sheet/${sample_name}/", pattern: '*.csv'
+    publishDir "${params.outdir}/trimmed_fastq/${sample_name}/", pattern: '*unmerged*.fastq.gz'
 
     input:
         tuple val(sample_name),val(species),path(R1), path(R2), val(attb_name), val(attp_name),val(umi_type),val(probes_name),val(cargo),val(group)
@@ -216,7 +218,7 @@ process ALIGN_READS {
     if (initial_mapper == "minimap2") {
         alignment_command = "minimap2 -ax sr -t 96 ${genome_reference} ${fastq}"
     } else if (initial_mapper == "bwa") {
-        alignment_command = "bwa mem -t 32 ${genome_reference}"
+        alignment_command = "bwa mem -Y -t 32 ${genome_reference}"
     } else {
         error "Unsupported initial_mapper: $initial_mapper"
     }
@@ -237,7 +239,7 @@ process ALIGN_READS {
         umi_tools dedup -I ${sample_name}_initial_alignment.bam --umi-separator ":" -S ${sample_name}_deduped_alignment.bam --method unique
         samtools index ${sample_name}_deduped_alignment.bam
 
-        rm *.sam
+        rm *.sam *_merged.bam *_unmerged.bam
         """
     } else {
         """
@@ -432,25 +434,33 @@ process CREATE_QUILT_PACKAGE {
 
 process TRANSLOCATION_DETECTION {
     cache 'lenient'
-    publishDir "${params.outdir}/translocation/"
+    publishDir "${params.outdir}/deduped_alignments/${sample_name}/", pattern:'*.dedup.ba*'
+    publishDir "${params.outdir}/deduped_alignments/${sample_name}/", pattern:'*.mark_duplicates.txt'
+    publishDir "${params.outdir}/translocation/", pattern:'*.svpileup.*'
 
     input:
         tuple val(sample_name), val(group), path(target_info), val(cargo_name), path(reference_genome), path(reference_index), path(bam_file), path(bam_file_index)
 
     output:
-        tuple val(sample_name), val(group), path("*.bnd.bed"), path("*.cargo.bed"), emit: bnd
-        path '*.vcf*'
+        tuple val(sample_name), val(group), path("*.svpileup.txt"), emit: bnd
+        file "*.svpileup.bam"
+        file "*.dedup.ba*"
+        file "*.mark_duplicates.txt"
 
     script:
     """
-    # delly SV call
-    delly call -g ${reference_genome} ${bam_file} -o ${sample_name}.delly.vcf -q 0 -r 0 -c 1 -z 0 -m 0 -t DEL,INV,BND &> log
-    bcftools query ${sample_name}.delly.vcf -i 'SVTYPE="BND"' -f "%CHROM\\t%POS\\t%CHR2\\t%POS2\\t%ID\\t%PE\\t%SR\\n" > ${sample_name}.bnd.bed
-    bcftools query ${sample_name}.delly.vcf -i 'SVTYPE="INV" || SVTYPE="DEL"' -f "%CHROM\\t%POS\\t%CHROM\\t%END\\t%ID\\t%PE\\t%SR\\n" >> ${sample_name}.bnd.bed
+    # copy umi from read name
+    samtools view ${bam_file} -H > tmp.sam
+    samtools view ${bam_file} | sed -e 's/_/-/' >> tmp.sam
+    fgbio -Dsamjdk.use_async_io_read_samtools=true CopyUmiFromReadName --input tmp.sam --output ${sample_name}.umi_from_read_name.bam
 
-    # extract the paired-end reads, one end mapped to reference, and one end to the cargo
-    samtools view -f1 -F2304 ${bam_file} -e '(rname=="$cargo_name" || rnext=="$cargo_name") && rname!=rnext' -b -@ 10 > ${sample_name}.initial_alignment.cargo.bam
-    samtools sort -n ${sample_name}.initial_alignment.cargo.bam | bedtools bamtobed -bedpe | awk -F "\\t" '{ OFS="\\t"; split(\$7,f,":"); print \$4,\$5,\$6,f[length(f)] }' | sort -u | sort -k1,1 -k2,2n > ${sample_name}.cargo.bed
+    # mark duplicates
+    picard -Dsamjdk.use_async_io_read_samtools=true -Duse_async_io_write_samtools=true MarkDuplicates --INPUT ${sample_name}.umi_from_read_name.bam --OUTPUT ${sample_name}.dedup.bam --METRICS_FILE ${sample_name}.mark_duplicates.txt --CREATE_INDEX --BARCODE_TAG RX
+
+    # Collates a pileup of sv supporting reads.
+    fgsv -Dsamjdk.use_async_io_read_samtools=true SvPileup --input=${sample_name}.dedup.bam --output=${sample_name}.svpileup
+
+    rm tmp.sam *.umi_from_read_name.ba*
     """
 }
 
@@ -514,7 +524,6 @@ workflow {
     raw_reads = DOWNLOAD_READS(params.project_id)
     samplesheet = GET_PROJECT_INFO(params.project_id,raw_reads,params.BENCHLING_WAREHOUSE_USERNAME,params.BENCHLING_WAREHOUSE_PASSWORD,params.BENCHLING_WAREHOUSE_URL,params.BENCHLING_API_KEY,params.BENCHLING_API_URL)
 
-
     // Existing logic to handle FASTQ file input
     samplesheet
     .splitCsv(header: true, sep: ',')
@@ -544,9 +553,8 @@ workflow {
 
     input_ch
         .combine(reference_genome.reference_fasta)
-        .combine(reference_genome.reference_index)
+        .combine(reference_genome.reference_index.toList())
         .set{probe_info_input_ch}
-
     probe_information = GET_TARGET_INFORMATION(probe_info_input_ch,params.cosmic_info,gtex_data,params.BENCHLING_WAREHOUSE_USERNAME,params.BENCHLING_WAREHOUSE_PASSWORD,params.BENCHLING_WAREHOUSE_URL,params.BENCHLING_API_KEY,params.BENCHLING_API_URL)
 
     amplicon_files = GENERATE_AMPLICONS(probe_information.target_info)
@@ -554,9 +562,8 @@ workflow {
     // generate ref and cargo reference
     probe_information.cargo_reference.map { it[2] }
         .unique()
-        .combine(reference_genome.reference_fasta)
         .set { cargo_ch }
-    reference_cargo_genome = GENERATE_REFERENCE_CARGO_GENOME(cargo_ch)
+    reference_cargo_genome = GENERATE_REFERENCE_CARGO_GENOME(cargo_ch, reference_genome.reference_fasta)
 
     probe_information.cargo_reference
         .map { [it[2], it[0], it[1]] }
@@ -653,7 +660,7 @@ workflow {
     probe_information.target_info
         .combine(TRANSLOCATION_DETECTION.out.bnd, by: [0,1])
         .set{target_info_and_bnd_ch}
-    intersect_cas_database_out = INTERSECT_CAS_DATABASE(target_info_and_bnd_ch)
+    // intersect_cas_database_out = INTERSECT_CAS_DATABASE(target_info_and_bnd_ch)
 
     // ** CREATE HTML REPORT **
 
