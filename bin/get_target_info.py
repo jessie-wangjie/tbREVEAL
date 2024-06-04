@@ -96,6 +96,9 @@ def download_cargo_genome(cargo_id):
 
     cargo_bases = cargo_bases.upper()
 
+    # add some bases before the start (from the end,because circular) in case attP is in beginning
+    cargo_bases = cargo_bases[-25:] + cargo_bases
+
     seq_record = SeqRecord(Seq(cargo_bases), id = cargo_name,description='')
 
     with open("cargo.fasta", "w") as output_handle:
