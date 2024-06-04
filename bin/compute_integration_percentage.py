@@ -216,7 +216,7 @@ def compute_integration_percentage(target_info, alignment_dir, sample_name):
                                     read, beacon_quant_lower, beacon_quant_upper
                                 ):
                                     indel_counter += 1
-                            elif "complete_beacon" in key and "AA" in row["id"]:
+                            elif "complete_beacon" in key:
                                 beacon_records[umi] = seq_record
                                 if has_indel_in_range(
                                     read, beacon_quant_lower, beacon_quant_upper
