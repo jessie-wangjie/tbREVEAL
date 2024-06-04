@@ -10,7 +10,6 @@ from Bio.Seq import Seq
 from Bio.SeqRecord import SeqRecord
 import re
 import numpy as np
-from fuzzywuzzy import fuzz
 
 
 def has_indel_in_range(alignment, start_range, end_range):
@@ -58,11 +57,6 @@ def compute_integration_percentage(target_info, alignment_dir, sample_name):
     p_reg_sequence = "GTGGTTTGTCTGGTCAACCACCGCG"
     p_prime_sequence = "CTCAGTGGTGTACGGTACAAACCCA"
 
-    def allow_mismatches(seq, pattern, min_ratio=80):
-        return any(
-            fuzz.partial_ratio(pattern, seq[i : i + len(pattern)]) >= min_ratio
-            for i in range(len(seq) - len(pattern) + 1)
-        )
 
     def get_umi(read):
         return read.query_name
@@ -118,7 +112,7 @@ def compute_integration_percentage(target_info, alignment_dir, sample_name):
                     4,
                 ]:  # Supplementary, Secondary, or Unaligned
                     continue
-
+                num_mismatch = read.get_tag("NM")
                 umi = get_umi(read)
                 start, end = calculate_soft_clipped_indices(read)
                 seq = read.seq[start:end]
@@ -142,7 +136,7 @@ def compute_integration_percentage(target_info, alignment_dir, sample_name):
                         and "CAS" in row["id"]
                         and alignment_start <= 21
                         and alignment_end >= 69
-                        and allow_mismatches(seq, p_prime_sequence, min_ratio=80),
+                        and num_mismatch <= 5,
                         ["complete_attL"],
                     ),
                     (
@@ -150,7 +144,7 @@ def compute_integration_percentage(target_info, alignment_dir, sample_name):
                         and "CAS" in row["id"]
                         and alignment_start <= 21
                         and alignment_end >= 69
-                        and allow_mismatches(seq, p_reg_sequence, min_ratio=80),
+                        and num_mismatch <= 5,
                         ["complete_attR"],
                     ),
                     (
@@ -165,14 +159,14 @@ def compute_integration_percentage(target_info, alignment_dir, sample_name):
                         read.reference_name == "attL_amplicon"
                         and "AA" in row["id"]
                         and (alignment_start <= 21 and alignment_end >= 65)
-                        and allow_mismatches(seq, p_prime_sequence, min_ratio=80),
+                        and num_mismatch <= 5,
                         ["complete_attL"],
                     ),
                     (
                         read.reference_name == "attR_amplicon"
                         and "AA" in row["id"]
                         and (alignment_start <= 21 and alignment_end >= 65)
-                        and allow_mismatches(seq, p_reg_sequence, min_ratio=80),
+                        and num_mismatch <= 5,
                         ["complete_attR"],
                     ),
                     (
@@ -182,7 +176,7 @@ def compute_integration_percentage(target_info, alignment_dir, sample_name):
                             alignment_start <= 21
                             and alignment_end >= (21 + len(full_attb_sequence) - 1)
                         )
-                        and not allow_mismatches(seq, full_attb_sequence, min_ratio=80),
+                        and (full_attb_sequence not in seq),
                         ["partial_beacon"],
                     ),
                     (
@@ -192,7 +186,7 @@ def compute_integration_percentage(target_info, alignment_dir, sample_name):
                             alignment_start <= 21
                             and alignment_end >= (21 + len(full_attb_sequence) - 1)
                         )
-                        and allow_mismatches(seq, full_attb_sequence, min_ratio=80),
+                        and (full_attb_sequence in seq),
                         ["complete_beacon"],
                     ),
                     (read.reference_name == "wt_amplicon", ["wt"]),
