@@ -57,6 +57,7 @@ def compute_integration_percentage(target_info, alignment_dir, sample_name):
     p_reg_sequence = "GTGGTTTGTCTGGTCAACCACCGCG"
     p_prime_sequence = "CTCAGTGGTGTACGGTACAAACCCA"
 
+
     def get_umi(read):
         return read.query_name
 
@@ -111,7 +112,7 @@ def compute_integration_percentage(target_info, alignment_dir, sample_name):
                     4,
                 ]:  # Supplementary, Secondary, or Unaligned
                     continue
-
+                num_mismatch = read.get_tag("NM")
                 umi = get_umi(read)
                 start, end = calculate_soft_clipped_indices(read)
                 seq = read.seq[start:end]
@@ -135,7 +136,7 @@ def compute_integration_percentage(target_info, alignment_dir, sample_name):
                         and "CAS" in row["id"]
                         and alignment_start <= 21
                         and alignment_end >= 69
-                        and p_prime_sequence in seq,
+                        and num_mismatch <= 5,
                         ["complete_attL"],
                     ),
                     (
@@ -143,7 +144,7 @@ def compute_integration_percentage(target_info, alignment_dir, sample_name):
                         and "CAS" in row["id"]
                         and alignment_start <= 21
                         and alignment_end >= 69
-                        and p_reg_sequence in seq,
+                        and num_mismatch <= 5,
                         ["complete_attR"],
                     ),
                     (
@@ -158,14 +159,14 @@ def compute_integration_percentage(target_info, alignment_dir, sample_name):
                         read.reference_name == "attL_amplicon"
                         and "AA" in row["id"]
                         and (alignment_start <= 21 and alignment_end >= 65)
-                        and p_prime_sequence in seq,
+                        and num_mismatch <= 5,
                         ["complete_attL"],
                     ),
                     (
                         read.reference_name == "attR_amplicon"
                         and "AA" in row["id"]
                         and (alignment_start <= 21 and alignment_end >= 65)
-                        and p_reg_sequence in seq,
+                        and num_mismatch <= 5,
                         ["complete_attR"],
                     ),
                     (
@@ -175,7 +176,7 @@ def compute_integration_percentage(target_info, alignment_dir, sample_name):
                             alignment_start <= 21
                             and alignment_end >= (21 + len(full_attb_sequence) - 1)
                         )
-                        and not bool(re.search(full_attb_sequence, seq)),
+                        and (full_attb_sequence not in seq),
                         ["partial_beacon"],
                     ),
                     (
@@ -185,7 +186,7 @@ def compute_integration_percentage(target_info, alignment_dir, sample_name):
                             alignment_start <= 21
                             and alignment_end >= (21 + len(full_attb_sequence) - 1)
                         )
-                        and bool(re.search(full_attb_sequence, seq)),
+                        and (full_attb_sequence in seq),
                         ["complete_beacon"],
                     ),
                     (read.reference_name == "wt_amplicon", ["wt"]),
@@ -209,7 +210,7 @@ def compute_integration_percentage(target_info, alignment_dir, sample_name):
                                     read, beacon_quant_lower, beacon_quant_upper
                                 ):
                                     indel_counter += 1
-                            elif "complete_beacon" in key and "AA" in row["id"]:
+                            elif "complete_beacon" in key:
                                 beacon_records[umi] = seq_record
                                 if has_indel_in_range(
                                     read, beacon_quant_lower, beacon_quant_upper
