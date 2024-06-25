@@ -442,7 +442,7 @@ process TRANSLOCATION_DETECTION {
         tuple val(sample_name), val(group), path(target_info), val(cargo_name), path(reference_genome), path(reference_index), path(bam_file), path(bam_file_index)
 
     output:
-        tuple val(sample_name), val(group), path("*.svpileup.txt"), emit: bnd
+        tuple val(sample_name), val(group), val(cargo_name), path("*.svpileup.txt"), emit: bnd
         file "*.svpileup.bam"
         file "*.dedup.ba*"
         file "*.mark_duplicates.txt"
@@ -468,7 +468,7 @@ process INTERSECT_CAS_DATABASE {
     publishDir "${params.outdir}/translocation/"
 
     input:
-        tuple val(sample_name), val(group), path(target_info), path(bnd_file), path(cargo_file)
+        tuple val(sample_name), val(group), path(target_info), val(cargo_name), path(bnd_file)
     output:
         path '*.cas.bed', emit: cas_bed
         path '*.cargo.cas.csv', emit: cargo_cas_bed
@@ -477,14 +477,14 @@ process INTERSECT_CAS_DATABASE {
     """
     cut -f1 -d "," $target_info | grep -v id | sort -u > CAS.list
     get_cas_info.py --cas CAS.list | sort -k1,1 -k2,2n | bedtools groupby -g 1,2,3 -c 4 -o distinct -delim "_" > CAS.cut.bed
-    awk -F "\\t" '{OFS="\\t"; print \$1,\$2-1,\$2,\$5,\$6+\$7"\\n"\$3,\$4-1,\$4,\$5,\$6+\$7}' ${bnd_file} | sort -k1,1 -k2,2n | bedtools closest -a stdin -b CAS.cut.bed -d | awk -F "\\t" '{OFS="\\t"; if(\$10<=5 && \$10>=0) print}' > ${sample_name}.bnd.cas.bed
+    grep -v id ${bnd_file} | awk -F "\\t" '{OFS="\\t"; print \$2,\$3-1,\$3,\$1,\$8,\$9"\\n"\$5,\$6-1,\$6,\$1,\$8,\$9}' | sort -k1,1 -k2,2n | bedtools closest -a stdin -b CAS.cut.bed -d -nonamecheck | awk -F "\\t" '{OFS="\\t"; if(\$11<=5 && \$11>=0) print}' | sort -k4n > ${sample_name}.bnd.cas.bed
 
-    bedtools closest -a ${cargo_file} -b CAS.cut.bed -d | awk -F "\\t" '{OFS="\\t"; if(\$9>0 && \$9<=100) print }' > tmp
+    grep -v id ${bnd_file} | grep ${cargo_name} | bedtools closest -a stdin -b CAS.cut.bed -d -nonamecheck | awk -F "\\t" '{OFS="\\t"; if(\$11>0 && \$11<=100) print }' > tmp
     if [ -s tmp ]
     then
-        sort -k8 tmp | bedtools groupby -g 8 -c 4 -o count > ${sample_name}.cargo.cas.csv
+         sort -k8 tmp | bedtools groupby -g 8 -c 4 -o count > ${sample_name}.cargo.cas.csv
     else
-        touch ${sample_name}.cargo.cas.csv
+         touch ${sample_name}.cargo.cas.csv
     fi
     """
 }
@@ -660,11 +660,11 @@ workflow {
     probe_information.target_info
         .combine(TRANSLOCATION_DETECTION.out.bnd, by: [0,1])
         .set{target_info_and_bnd_ch}
-    // intersect_cas_database_out = INTERSECT_CAS_DATABASE(target_info_and_bnd_ch)
+    intersect_cas_database_out = INTERSECT_CAS_DATABASE(target_info_and_bnd_ch)
 
     // ** CREATE HTML REPORT **
 
-    html_report = CREATE_PYTHON_NOTEBOOK_REPORT(report_excel_file, params.notebook_template)
+    // html_report = CREATE_PYTHON_NOTEBOOK_REPORT(report_excel_file, params.notebook_template)
 
     // CREATE_QUILT_PACKAGE(params.outdir,html_report,intersect_cas_database_out.cas_bed.collect(),params.project_id,params.bucket_name,params.quilt_package_name,params.BENCHLING_WAREHOUSE_USERNAME,params.BENCHLING_WAREHOUSE_PASSWORD,params.BENCHLING_WAREHOUSE_URL,params.BENCHLING_API_KEY,params.BENCHLING_API_URL)
 
