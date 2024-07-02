@@ -479,10 +479,10 @@ process INTERSECT_CAS_DATABASE {
     get_cas_info.py --cas CAS.list | sort -k1,1 -k2,2n | bedtools groupby -g 1,2,3 -c 4 -o distinct -delim "_" > CAS.cut.bed
     grep -v id ${bnd_file} | awk -F "\\t" '{OFS="\\t"; print \$2,\$3-1,\$3,\$1,\$8,\$9"\\n"\$5,\$6-1,\$6,\$1,\$8,\$9}' | sort -k1,1 -k2,2n | bedtools closest -a stdin -b CAS.cut.bed -d -nonamecheck | awk -F "\\t" '{OFS="\\t"; if(\$11<=5 && \$11>=0) print}' | sort -k4n > ${sample_name}.bnd.cas.bed
 
-    grep -v id ${bnd_file} | grep ${cargo_name} | bedtools closest -a stdin -b CAS.cut.bed -d -nonamecheck | awk -F "\\t" '{OFS="\\t"; if(\$11>0 && \$11<=100) print }' > tmp
+    grep -v id ${bnd_file} | grep ${cargo_name} | awk -F "\\t" '{OFS="\\t"; print \$2,\$3-1,\$3,\$1,\$8,\$9"\\n"\$5,\$6-1,\$6,\$1,\$8,\$9}' | sort -k1,1 -k2,2n | bedtools closest -a stdin -b CAS.cut.bed -d -nonamecheck | awk -F "\\t" '{OFS="\\t"; if(\$11>0 && \$11<=100) print }' > tmp
     if [ -s tmp ]
     then
-         sort -k8 tmp | bedtools groupby -g 8 -c 4 -o count > ${sample_name}.cargo.cas.csv
+         sort -k10 tmp | bedtools groupby -g 10 -c 4 -o count > ${sample_name}.cargo.cas.csv
     else
          touch ${sample_name}.cargo.cas.csv
     fi
@@ -664,8 +664,8 @@ workflow {
 
     // ** CREATE HTML REPORT **
 
-    // html_report = CREATE_PYTHON_NOTEBOOK_REPORT(report_excel_file, params.notebook_template)
+    html_report = CREATE_PYTHON_NOTEBOOK_REPORT(report_excel_file, params.notebook_template)
 
-    // CREATE_QUILT_PACKAGE(params.outdir,html_report,intersect_cas_database_out.cas_bed.collect(),params.project_id,params.bucket_name,params.quilt_package_name,params.BENCHLING_WAREHOUSE_USERNAME,params.BENCHLING_WAREHOUSE_PASSWORD,params.BENCHLING_WAREHOUSE_URL,params.BENCHLING_API_KEY,params.BENCHLING_API_URL)
+    CREATE_QUILT_PACKAGE(params.outdir,html_report,intersect_cas_database_out.cas_bed.collect(),params.project_id,params.bucket_name,params.quilt_package_name,params.BENCHLING_WAREHOUSE_USERNAME,params.BENCHLING_WAREHOUSE_PASSWORD,params.BENCHLING_WAREHOUSE_URL,params.BENCHLING_API_KEY,params.BENCHLING_API_URL)
 
 }

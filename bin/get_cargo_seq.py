@@ -15,9 +15,8 @@ if __name__ == "__main__":
     # Parse the arguments
     args = parser.parse_args()
 
-    cur.execute("SELECT registry_entity.file_registry_id, bases FROM dna_sequence "
-                "join registry_entity on registry_entity.id = dna_sequence.id "
-                "WHERE dna_sequence.name = %s", [args.cargo])
+    cur.execute("SELECT name, bases FROM dna_sequence "
+                "WHERE name = %s", [args.cargo])
     cargo_name, cargo_bases = cur.fetchone()
     cargo_bases = cargo_bases.upper()
 
