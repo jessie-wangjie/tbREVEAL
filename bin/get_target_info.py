@@ -40,8 +40,10 @@ def get_attp_info(attp):
     return(attp_left,attp_right)
 
 def download_probes_file(probes_name):
+    probes_name = ';'.join(probes_name.strip("[]").replace("'", "").split(","))
+    print(probes_name)
     panel_query ='''
-        SELECT probes_bed_file FROM hcpanel WHERE name$ = %s
+        SELECT probes_bed_file FROM hcpanel WHERE id = %s
         '''
     cur.execute(panel_query, [probes_name])
     probes_query_result = cur.fetchone()

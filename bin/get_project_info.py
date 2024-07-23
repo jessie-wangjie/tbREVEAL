@@ -10,7 +10,7 @@ import pandas as pd
 def get_project_info(project_id):
 
     metadata_query = '''
-    SELECT sample_name,sequencing_sample_name,attb,attp,primers,umi_type,species,probes_or_barcodes,donor,"group"
+    SELECT sample_name,sequencing_sample_name,attb,attp,primers,hybrid_capture_panel,umi_type,species,probes_or_barcodes,donor,"group"
     FROM tomebiosciences.genomic_assays_metadata$raw
     WHERE genomics_project_queue = %s and archived$ = false
     '''
@@ -18,7 +18,7 @@ def get_project_info(project_id):
     metadata_query_result = cur.fetchall()
     sample_info = {}
     for result in metadata_query_result:
-        sample_name, sequencing_sample_name,attb, attp, primers, umi_type, species, probes, donor, group = result
+        sample_name, sequencing_sample_name,attb, attp, primers, hybrid_capture_panel, umi_type, species, probes, donor, group = result
 
         R1, R2 = None, None  # Initialize R1 and R2 for each sample_name
         for entry in os.listdir('.'):
@@ -30,7 +30,11 @@ def get_project_info(project_id):
                     R2 = entry_path  # Store the absolute path
 
         if R1 and R2:  # Ensure both R1 and R2 are found before adding to the dictionary
-            sample_info[sample_name] = (R1, R2, species, attb, attp, umi_type, probes, donor, group)
+            if primers and not umi_type:
+                sample_info[sample_name] = (R1, R2, species, attb, attp, primers, hybrid_capture_panel, donor, group)
+            else:
+                sample_info[sample_name] = (R1, R2, species, attb, attp, umi_type, hybrid_capture_panel, donor, group)
+
 
     samplesheet_df = pd.DataFrame.from_dict(sample_info, orient="index").reset_index()
     samplesheet_df.columns = ['sample_name', 'read1', 'read2', 'species', 'attb', 'attp', 'umi_type', 'probes_name', 'cargo_name', 'group']

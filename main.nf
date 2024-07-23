@@ -40,7 +40,7 @@ process GET_PROJECT_INFO {
         export WAREHOUSE_URL='${benchling_warehouse_url}'
         export API_KEY='${benchling_sdk_api_key}'
         export API_URL='${benchling_api_url}'
-        get_project_info.py --project_id ${project_id}
+        get_project_info.py --project_id "${project_id}"
         """
 }
 
@@ -66,7 +66,7 @@ process DOWNLOAD_READS {
         path "*"
     script:
         """
-        run_id=\$(bs list projects  --access-token ${access_token} --api-server ${api_server} --filter-term=^${project_id}\$ -f csv | grep ${project_id} | cut -f 2 -d ',')
+        run_id=\$(bs list projects  --access-token ${access_token} --api-server ${api_server} --filter-term=^${project_id}\$ -f csv | grep "${project_id}" | tail -1 | cut -f 2 -d ',')
         bs download projects --access-token ${access_token} --api-server ${api_server} -i \${run_id} -o . --extension=fastq.gz --no-metadata
         mv */* .
         find . -type d -empty -exec rmdir {} +
@@ -321,7 +321,7 @@ process UPDATE_BENCHLING_WITH_VALIDATED_SITES {
     export WAREHOUSE_URL='${benchling_warehouse_url}'
     export API_KEY='${benchling_sdk_api_key}'
     export API_URL='${benchling_api_url}'
-    update_benchling_with_offtargets.py --project_id ${project_id} --integration_csv ${integration_csv}
+    update_benchling_with_offtargets.py --project_id "${project_id}" --integration_csv ${integration_csv}
     """
 }
 
@@ -371,7 +371,7 @@ process GENERATE_REPORT {
     script:
         """
         ulimit -s 65536
-        collate_results.py --project_config_file ${project_config_file} --integration_stats_files ${integration_stats_files} --read_counts_per_site_files ${read_counts_per_site_files} --qc_summary_files ${qc_summary_files} --extracted_reads_dirs ${extracted_reads} --project_name ${project_name}
+        collate_results.py --project_config_file ${project_config_file} --integration_stats_files ${integration_stats_files} --read_counts_per_site_files ${read_counts_per_site_files} --qc_summary_files ${qc_summary_files} --extracted_reads_dirs ${extracted_reads} --project_name "${project_name}"
         """
     }
 
@@ -432,7 +432,7 @@ process CREATE_QUILT_PACKAGE {
     export WAREHOUSE_URL='${benchling_warehouse_url}'
     export API_KEY='${benchling_sdk_api_key}'
     export API_URL='${benchling_api_url}'
-    create_quilt_package.py --output_folder ${workflow.launchDir}/${output_folder} --project_id ${project_id} --bucket_name ${bucket_name} --package_name ${quilt_output}
+    create_quilt_package.py --output_folder ${workflow.launchDir}/${output_folder} --project_id "${project_id}" --bucket_name ${bucket_name} --package_name "${quilt_output}"
     """
 }
 
@@ -600,6 +600,8 @@ workflow {
         .map{ tuple -> tuple[2] }
         .collect()
         .set{integration_stats_files_ch}
+
+    integration_stats_files_ch.view()
 
     extract_target_reads_out.read_counts_per_site_file
         .collect(flat:false)

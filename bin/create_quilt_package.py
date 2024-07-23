@@ -46,6 +46,8 @@ if __name__ == "__main__":
     package_name = args.package_name
     bucket_name = args.bucket_name
 
+    package_name = package_name.replace(' ','_')
+
     benchling = Benchling(url="https://tome.benchling.com", auth_method=ApiKeyAuth(api_key))
     entity = benchling.custom_entities.list(name=project_id_base)
     print(entity.first())
