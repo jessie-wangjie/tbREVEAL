@@ -6,43 +6,8 @@ params.initial_mapper = 'bwa'
 params.notebook_template = "${workflow.projectDir}/bin/report_generation.ipynb"
 params.bam2html_path = "${workflow.projectDir}/bin/utils/bam2html.py"
 params.dinucleotides = ''
-params.cosmic_info = "/data/cryptic_prediction/data/cosmic/cancer_gene_census.csv"
-params.BENCHLING_WAREHOUSE_USERNAME=''
-params.BENCHLING_WAREHOUSE_PASSWORD=''
-params.BENCHLING_WAREHOUSE_URL=''
-params.BENCHLING_WAREHOUSE_API_KEY=''
-params.BENCHLING_WAREHOUSE_SDK_KEY=''
-params.BENCHLING_API_URL=''
-params.BS_ACCESS_TOKEN=''
-params.BS_API_SERVER=''
-params.AWS_ACCESS_KEY_ID=''
-params.AWS_SECRET_ACCESS_KEY=''
-tet=st
-params.bucket_name='s3://tb-ngs-genomics-quilt/'
 params.project_id=''
-params.quilt_package_name="HybridCapture/${params.project_id}"
 
-process GET_PROJECT_INFO {
-    input:
-        val project_id
-        path raw_reads
-        val benchling_warehouse_username
-        val benchling_warehouse_password
-        val benchling_warehouse_url
-        val benchling_sdk_api_key
-        val benchling_api_url
-    output:
-        path('samplesheet.csv')
-    script:
-        """
-        export WAREHOUSE_USERNAME='${benchling_warehouse_username}'
-        export WAREHOUSE_PASSWORD='${benchling_warehouse_password}'
-        export WAREHOUSE_URL='${benchling_warehouse_url}'
-        export API_KEY='${benchling_sdk_api_key}'
-        export API_URL='${benchling_api_url}'
-        get_project_info.py --project_id "${project_id}"
-        """
-}
 
 process DOWNLOAD_GTEX_DATA {
     input:
@@ -54,98 +19,6 @@ process DOWNLOAD_GTEX_DATA {
         wget https://storage.googleapis.com/adult-gtex/bulk-gex/v8/rna-seq/GTEx_Analysis_2017-06-05_v8_RNASeQCv1.1.9_gene_median_tpm.gct.gz
         gunzip GTEx_Analysis_2017-06-05_v8_RNASeQCv1.1.9_gene_median_tpm.gct.gz
         mv GTEx_Analysis_2017-06-05_v8_RNASeQCv1.1.9_gene_median_tpm.gct gtex_gene_median_tpm.csv
-        """
-}
-
-process DOWNLOAD_READS {
-    input:
-        val project_id
-        val access_token
-        val api_server
-    output:
-        path "*"
-    script:
-        """
-        run_id=\$(bs list projects  --access-token ${access_token} --api-server ${api_server} --filter-term=^${project_id}\$ -f csv | grep "${project_id}" | tail -1 | cut -f 2 -d ',')
-        bs download projects --access-token ${access_token} --api-server ${api_server} -i \${run_id} -o . --extension=fastq.gz --no-metadata
-        mv */* .
-        find . -type d -empty -exec rmdir {} +
-        """
-}
-
-process DOWNLOAD_REFERENCE_GENOME {
-    input:
-        val reference_species
-        val aws_access_key_id
-        val aws_secret_access_key
-    output:
-        path("*.{fa,fna,fasta}"), emit: reference_fasta
-        path("*.{fa,fna,fasta}.*"), emit: reference_index
-    script:
-
-    if (reference_species == "Human" || reference_species == "Homo sapiens") {
-        species_reference_fasta_path = 's3://tomebfx-data/references/hg38_no_alts/hg38_no_alts.fa'
-        species_reference_amb_path = 's3://tomebfx-data/references/hg38_no_alts/hg38_no_alts.fa.amb'
-        species_reference_ann_path = 's3://tomebfx-data/references/hg38_no_alts/hg38_no_alts.fa.ann'
-        species_reference_bwt_path = 's3://tomebfx-data/references/hg38_no_alts/hg38_no_alts.fa.bwt'
-        species_reference_fai_path = 's3://tomebfx-data/references/hg38_no_alts/hg38_no_alts.fa.fai'
-        species_reference_pac_path = 's3://tomebfx-data/references/hg38_no_alts/hg38_no_alts.fa.pac'
-        species_reference_sa_path = 's3://tomebfx-data/references/hg38_no_alts/hg38_no_alts.fa.sa'
-    } else if (reference_species == "Mouse" || reference_species == "Mus musculus") {
-        species_reference_fasta_path = 's3://tomebfx-data/references/mm39_and_rosa26_and_F9_insert/mm39_and_rosa26_and_F9_insert.fasta'
-        species_reference_amb_path = 's3://tomebfx-data/references/mm39_and_rosa26_and_F9_insert/mm39_and_rosa26_and_F9_insert.fasta.amb'
-        species_reference_ann_path = 's3://tomebfx-data/references/mm39_and_rosa26_and_F9_insert/mm39_and_rosa26_and_F9_insert.fasta.ann'
-        species_reference_bwt_path = 's3://tomebfx-data/references/mm39_and_rosa26_and_F9_insert/mm39_and_rosa26_and_F9_insert.fasta.bwt'
-        species_reference_fai_path = 's3://tomebfx-data/references/mm39_and_rosa26_and_F9_insert/mm39_and_rosa26_and_F9_insert.fasta.fai'
-        species_reference_pac_path = 's3://tomebfx-data/references/mm39_and_rosa26_and_F9_insert/mm39_and_rosa26_and_F9_insert.fasta.pac'
-        species_reference_sa_path = 's3://tomebfx-data/references/mm39_and_rosa26_and_F9_insert/mm39_and_rosa26_and_F9_insert.fasta.sa'
-    } else if (reference_species == "Monkey" || reference_species == "Macaca fascicularis" || reference_species == "NHP") {
-        species_reference_fasta_path = 's3://tomebfx-data/references/Macaca_fascicularis_6/GCA_011100615.1_Macaca_fascicularis_6.0_genomic.fna'
-        species_reference_amb_path = 's3://tomebfx-data/references/Macaca_fascicularis_6/GCA_011100615.1_Macaca_fascicularis_6.0_genomic.fna.amb'
-        species_reference_ann_path = 's3://tomebfx-data/references/Macaca_fascicularis_6/GCA_011100615.1_Macaca_fascicularis_6.0_genomic.fna.ann'
-        species_reference_bwt_path = 's3://tomebfx-data/references/Macaca_fascicularis_6/GCA_011100615.1_Macaca_fascicularis_6.0_genomic.fna.bwt'
-        species_reference_fai_path = 's3://tomebfx-data/references/Macaca_fascicularis_6/GCA_011100615.1_Macaca_fascicularis_6.0_genomic.fna.fai'
-        species_reference_pac_path = 's3://tomebfx-data/references/Macaca_fascicularis_6/GCA_011100615.1_Macaca_fascicularis_6.0_genomic.fna.pac'
-        species_reference_sa_path = 's3://tomebfx-data/references/Macaca_fascicularis_6/GCA_011100615.1_Macaca_fascicularis_6.0_genomic.fna.sa'
-    }
-    """
-    aws configure set aws_access_key_id ${aws_access_key_id}
-    aws configure set aws_secret_access_key ${aws_secret_access_key}
-    aws s3 cp ${species_reference_fasta_path} .
-    aws s3 cp ${species_reference_amb_path} .
-    aws s3 cp ${species_reference_ann_path} .
-    aws s3 cp ${species_reference_bwt_path} .
-    aws s3 cp ${species_reference_fai_path} .
-    aws s3 cp ${species_reference_pac_path} .
-    aws s3 cp ${species_reference_sa_path} .
-    """
-}
-
-process GET_TARGET_INFORMATION {
-    cache 'lenient'
-    publishDir "${params.outdir}/full_probe_info/${sample_name}/", overwrite: true
-    input:
-        tuple val(sample_name),val(species),path(R1), path(R2), val(attb_name), val(attp_name),val(umi_type),val(probes_name),val(cargo),val(group),path(reference_genome), path(reference_index1),path(reference_index2),path(reference_index3),path(reference_index4),path(reference_index5),path(reference_index6)
-        path cosmic_info
-        path gtex_info
-        val benchling_warehouse_username
-        val benchling_warehouse_password
-        val benchling_warehouse_url
-        val benchling_sdk_api_key
-        val benchling_api_url
-
-    output:
-        tuple val(sample_name), val(group), path("${sample_name}_target_info.csv"), emit: target_info
-        tuple val(sample_name), val(group), path("cargo.fasta"), emit: cargo_reference
-
-    script:
-        """
-        export WAREHOUSE_USERNAME='${benchling_warehouse_username}'
-        export WAREHOUSE_PASSWORD='${benchling_warehouse_password}'
-        export WAREHOUSE_URL='${benchling_warehouse_url}'
-        export API_KEY='${benchling_sdk_api_key}'
-        export API_URL='${benchling_api_url}'
-        get_target_info.py --probes_name "${probes_name}" --cosmic_info "${cosmic_info}" --gtex_info "${gtex_info}" --attp_name "${attp_name}" --reference "${reference_genome}" --cargo "${cargo}" --sample_name "${sample_name}"
         """
 }
 
@@ -303,28 +176,6 @@ process MEASURE_INTEGRATION {
     """
 }
 
-process UPDATE_BENCHLING_WITH_VALIDATED_SITES {
-    input:
-        val project_id
-        tuple val(sample_name), val(group), path(integration_csv)
-        val benchling_warehouse_username
-        val benchling_warehouse_password
-        val benchling_warehouse_url
-        val benchling_sdk_api_key
-        val benchling_api_url
-    output:
-
-    script:
-    """
-    export WAREHOUSE_USERNAME='${benchling_warehouse_username}'
-    export WAREHOUSE_PASSWORD='${benchling_warehouse_password}'
-    export WAREHOUSE_URL='${benchling_warehouse_url}'
-    export API_KEY='${benchling_sdk_api_key}'
-    export API_URL='${benchling_api_url}'
-    update_benchling_with_offtargets.py --project_id "${project_id}" --integration_csv ${integration_csv}
-    """
-}
-
 process GATHER_QC_INFO {
     cache 'lenient'
     publishDir "${params.outdir}/qc_info/${sample_name}/", overwrite: true
@@ -406,35 +257,6 @@ process CREATE_PYTHON_NOTEBOOK_REPORT {
     """
 }
 
-process CREATE_QUILT_PACKAGE {
-    input:
-        val output_folder
-        path notebook_report
-        path cas_bed
-        val project_id
-        val bucket_name
-        val quilt_output
-        val benchling_warehouse_username
-        val benchling_warehouse_password
-        val benchling_warehouse_url
-        val benchling_sdk_api_key
-        val benchling_api_url
-        val aws_access_key_id
-        val aws_secret_access_key
-    output:
-
-    script:
-    """
-    aws configure set aws_access_key_id ${aws_access_key_id}
-    aws configure set aws_secret_access_key ${aws_secret_access_key}
-    export WAREHOUSE_USERNAME='${benchling_warehouse_username}'
-    export WAREHOUSE_PASSWORD='${benchling_warehouse_password}'
-    export WAREHOUSE_URL='${benchling_warehouse_url}'
-    export API_KEY='${benchling_sdk_api_key}'
-    export API_URL='${benchling_api_url}'
-    create_quilt_package.py --output_folder ${workflow.launchDir}/${output_folder} --project_id "${project_id}" --bucket_name ${bucket_name} --package_name "${quilt_output}"
-    """
-}
 
 process TRANSLOCATION_DETECTION {
     cache 'lenient'
