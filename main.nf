@@ -17,7 +17,7 @@ params.BS_ACCESS_TOKEN=''
 params.BS_API_SERVER=''
 params.AWS_ACCESS_KEY_ID=''
 params.AWS_SECRET_ACCESS_KEY=''
-
+tet=st
 params.bucket_name='s3://tb-ngs-genomics-quilt/'
 params.project_id=''
 params.quilt_package_name="HybridCapture/${params.project_id}"
