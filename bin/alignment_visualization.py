@@ -4,20 +4,20 @@ import os
 import argparse
 import pandas as pd
 import subprocess
-import shutil
-import glob
 import sys
+
 
 def read_target_info(target_info):
     return pd.read_csv(target_info)
+
 
 def get_amplicon_sequence(amplicon_path, chr_name):
     amplicon_sequence_command = f'samtools faidx {amplicon_path} {chr_name}'
     amplicon_sequence = ''.join(subprocess.check_output(amplicon_sequence_command, shell=True).decode(sys.stdout.encoding).split('\n')[1:]).upper()
     return amplicon_sequence
 
-def alignment_visualization(bam2html_path, bam_dir, target_info_df, junction_type, sample_name):
 
+def alignment_visualization(bam2html_path, target_info_df, junction_type):
     for _, row in target_info_df.iterrows():
         id = row['id']
         quant_window = row.get(f'{junction_type}_quant_window', None)
@@ -35,7 +35,6 @@ def alignment_visualization(bam2html_path, bam_dir, target_info_df, junction_typ
         if os.path.exists(fastq_fn):
             amplicon_path = f"{id}_amplicon.fasta"
             bam_path = f"{id}_alignment.bam"
-            amplicon_sequence = get_amplicon_sequence(amplicon_path, f"{junction_type}_amplicon")
 
             allele2html_command = f"{bam2html_path} -s {bam_path} -f {amplicon_path} -r {junction_type}_amplicon -o {id}_{junction_type}_alignment.html"
             print(allele2html_command)
@@ -43,10 +42,11 @@ def alignment_visualization(bam2html_path, bam_dir, target_info_df, junction_typ
                 allele2html_command += f" -b {quant_window_range}"
             subprocess.call(allele2html_command, shell=True)
 
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Process reads and amplicons.')
     parser.add_argument('--bam2html_path', type=str, help='Path to bam2html.py script')
-    parser.add_argument('--bam', type=str, nargs = '+', help='Path to the directory containing alignments in BAM format.')
+    parser.add_argument('--bam', type=str, nargs='+', help='Path to the directory containing alignments in BAM format.')
     parser.add_argument('--target_info', type=str, help='Path to the target information file.')
     parser.add_argument('--sample_name', type=str, help='Sample name')
 
@@ -54,4 +54,4 @@ if __name__ == "__main__":
 
     target_info_df = read_target_info(args.target_info)
     for junction_type in ['attL', 'attR', 'beacon', 'wt']:
-        alignment_visualization(args.bam2html_path, args.bam, target_info_df, junction_type, args.sample_name)
+        alignment_visualization(args.bam2html_path, target_info_df, junction_type)

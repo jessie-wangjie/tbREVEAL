@@ -40,8 +40,10 @@ def get_attp_info(attp):
     return(attp_left,attp_right)
 
 def download_probes_file(probes_name):
+    probes_name = ';'.join(probes_name.strip("[]").replace("'", "").split(","))
+    print(probes_name)
     panel_query ='''
-        SELECT probes_bed_file FROM hcpanel WHERE name$ = %s
+        SELECT probes_bed_file FROM hcpanel WHERE id = %s
         '''
     cur.execute(panel_query, [probes_name])
     probes_query_result = cur.fetchone()
@@ -95,6 +97,9 @@ def download_cargo_genome(cargo_id):
     cargo_name,cargo_bases = cargo_query_result
 
     cargo_bases = cargo_bases.upper()
+
+    # add some bases before the start (from the end,because circular) in case attP is in beginning
+    cargo_bases = cargo_bases[-25:] + cargo_bases
 
     seq_record = SeqRecord(Seq(cargo_bases), id = cargo_name,description='')
 
@@ -219,9 +224,6 @@ def get_target_info(cosmic_info,gtex_info,attp_name,reference_path,cargo_id, sam
             if '_' in chr:
                 continue
 
-            if 'chr' not in chr:
-                chr = 'chr' + chr
-
             query = '''
             SELECT
                 chr, start, spacer_off_target.end, strand, overlap_gene, overlap_gene_biotype, threat_tier
@@ -279,9 +281,6 @@ def get_target_info(cosmic_info,gtex_info,attp_name,reference_path,cargo_id, sam
 
             if '_' in chr:
                 continue
-
-            if 'chr' not in chr:
-                chr = 'chr' + chr
 
             query = '''
             SELECT
@@ -406,11 +405,8 @@ def get_target_info(cosmic_info,gtex_info,attp_name,reference_path,cargo_id, sam
             end = updated_df[updated_df.Target == id]['Stop'].iloc[0]
             strand = updated_df[updated_df.Target == id]['Strand'].iloc[0]
 
-            if '_' in chr:
+            if ('_' in chr) and ('rosa' not in chr):
                 continue
-
-            if 'chr' not in chr:
-                chr = 'chr' + chr
 
             query = '''
             SELECT

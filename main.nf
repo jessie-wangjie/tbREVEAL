@@ -2,7 +2,6 @@ nextflow.enable.dsl=2
 
 
 params.outdir = "output"
-params.collapse_condition = 'Complete'
 params.initial_mapper = 'bwa'
 params.notebook_template = "${workflow.projectDir}/bin/report_generation.ipynb"
 params.bam2html_path = "${workflow.projectDir}/bin/utils/bam2html.py"
@@ -14,6 +13,11 @@ params.BENCHLING_WAREHOUSE_URL=''
 params.BENCHLING_WAREHOUSE_API_KEY=''
 params.BENCHLING_WAREHOUSE_SDK_KEY=''
 params.BENCHLING_API_URL=''
+params.BS_ACCESS_TOKEN=''
+params.BS_API_SERVER=''
+params.AWS_ACCESS_KEY_ID=''
+params.AWS_SECRET_ACCESS_KEY=''
+
 params.bucket_name='s3://tb-ngs-genomics-quilt/'
 params.project_id=''
 params.quilt_package_name="HybridCapture/${params.project_id}"
@@ -36,7 +40,7 @@ process GET_PROJECT_INFO {
         export WAREHOUSE_URL='${benchling_warehouse_url}'
         export API_KEY='${benchling_sdk_api_key}'
         export API_URL='${benchling_api_url}'
-        get_project_info.py --project_id ${project_id}
+        get_project_info.py --project_id "${project_id}"
         """
 }
 
@@ -56,12 +60,14 @@ process DOWNLOAD_GTEX_DATA {
 process DOWNLOAD_READS {
     input:
         val project_id
+        val access_token
+        val api_server
     output:
         path "*"
     script:
         """
-        run_id=\$(bs list projects --filter-term=^${project_id}\$ -f csv | grep "${project_id}" | cut -f 2 -d ',' | tail -1)
-        bs download projects -i \${run_id} -o . --extension=fastq.gz --no-metadata
+        run_id=\$(bs list projects  --access-token ${access_token} --api-server ${api_server} --filter-term=^${project_id}\$ -f csv | grep "${project_id}" | tail -1 | cut -f 2 -d ',')
+        bs download projects --access-token ${access_token} --api-server ${api_server} -i \${run_id} -o . --extension=fastq.gz --no-metadata
         mv */* .
         find . -type d -empty -exec rmdir {} +
         """
@@ -70,6 +76,8 @@ process DOWNLOAD_READS {
 process DOWNLOAD_REFERENCE_GENOME {
     input:
         val reference_species
+        val aws_access_key_id
+        val aws_secret_access_key
     output:
         path("*.{fa,fna,fasta}"), emit: reference_fasta
         path("*.{fa,fna,fasta}.*"), emit: reference_index
@@ -83,14 +91,14 @@ process DOWNLOAD_REFERENCE_GENOME {
         species_reference_fai_path = 's3://tomebfx-data/references/hg38_no_alts/hg38_no_alts.fa.fai'
         species_reference_pac_path = 's3://tomebfx-data/references/hg38_no_alts/hg38_no_alts.fa.pac'
         species_reference_sa_path = 's3://tomebfx-data/references/hg38_no_alts/hg38_no_alts.fa.sa'
-    } else if (reference_species == "Mouse") {
-        species_reference_fasta_path = 's3://tomebfx-data/references/hg38_no_alts/hg38_no_alts.fa'
-        species_reference_amb_path = 's3://tomebfx-data/references/hg38_no_alts/hg38_no_alts.fa.amb'
-        species_reference_ann_path = 's3://tomebfx-data/references/hg38_no_alts/hg38_no_alts.fa.ann'
-        species_reference_bwt_path = 's3://tomebfx-data/references/hg38_no_alts/hg38_no_alts.fa.bwt'
-        species_reference_fai_path = 's3://tomebfx-data/references/hg38_no_alts/hg38_no_alts.fa.fai'
-        species_reference_pac_path = 's3://tomebfx-data/references/hg38_no_alts/hg38_no_alts.fa.pac'
-        species_reference_sa_path = 's3://tomebfx-data/references/hg38_no_alts/hg38_no_alts.fa.sa'
+    } else if (reference_species == "Mouse" || reference_species == "Mus musculus") {
+        species_reference_fasta_path = 's3://tomebfx-data/references/mm39_and_rosa26_and_F9_insert/mm39_and_rosa26_and_F9_insert.fasta'
+        species_reference_amb_path = 's3://tomebfx-data/references/mm39_and_rosa26_and_F9_insert/mm39_and_rosa26_and_F9_insert.fasta.amb'
+        species_reference_ann_path = 's3://tomebfx-data/references/mm39_and_rosa26_and_F9_insert/mm39_and_rosa26_and_F9_insert.fasta.ann'
+        species_reference_bwt_path = 's3://tomebfx-data/references/mm39_and_rosa26_and_F9_insert/mm39_and_rosa26_and_F9_insert.fasta.bwt'
+        species_reference_fai_path = 's3://tomebfx-data/references/mm39_and_rosa26_and_F9_insert/mm39_and_rosa26_and_F9_insert.fasta.fai'
+        species_reference_pac_path = 's3://tomebfx-data/references/mm39_and_rosa26_and_F9_insert/mm39_and_rosa26_and_F9_insert.fasta.pac'
+        species_reference_sa_path = 's3://tomebfx-data/references/mm39_and_rosa26_and_F9_insert/mm39_and_rosa26_and_F9_insert.fasta.sa'
     } else if (reference_species == "Monkey" || reference_species == "Macaca fascicularis" || reference_species == "NHP") {
         species_reference_fasta_path = 's3://tomebfx-data/references/Macaca_fascicularis_6/GCA_011100615.1_Macaca_fascicularis_6.0_genomic.fna'
         species_reference_amb_path = 's3://tomebfx-data/references/Macaca_fascicularis_6/GCA_011100615.1_Macaca_fascicularis_6.0_genomic.fna.amb'
@@ -101,6 +109,8 @@ process DOWNLOAD_REFERENCE_GENOME {
         species_reference_sa_path = 's3://tomebfx-data/references/Macaca_fascicularis_6/GCA_011100615.1_Macaca_fascicularis_6.0_genomic.fna.sa'
     }
     """
+    aws configure set aws_access_key_id ${aws_access_key_id}
+    aws configure set aws_secret_access_key ${aws_secret_access_key}
     aws s3 cp ${species_reference_fasta_path} .
     aws s3 cp ${species_reference_amb_path} .
     aws s3 cp ${species_reference_ann_path} .
@@ -113,7 +123,7 @@ process DOWNLOAD_REFERENCE_GENOME {
 
 process GET_TARGET_INFORMATION {
     cache 'lenient'
-    publishDir "${params.outdir}/full_probe_info/${sample_name}/"
+    publishDir "${params.outdir}/full_probe_info/${sample_name}/", overwrite: true
     input:
         tuple val(sample_name), val(species), path(R1), path(R2), val(attb_name), val(attp_name), val(umi_type), val(probes_name), val(cargo), val(group), path(reference_genome), path(reference_index)
         path cosmic_info
@@ -164,6 +174,7 @@ process ADAPTER_AND_POLY_G_TRIM {
     publishDir "${params.outdir}/raw_fastq/${sample_name}/", pattern: '*_R[1|2]_*.fastq.gz'
     publishDir "${params.outdir}/trimmed_fastq/${sample_name}/", pattern: '*trimmed*.fastq.gz'
     publishDir "${params.outdir}/trimmed_fastq/${sample_name}/", pattern: '*unmerged*.fastq.gz'
+    publishDir "${params.outdir}/input_probe_sheet/${sample_name}/", pattern: '*.csv', overwrite: true
 
     input:
         tuple val(sample_name),val(species),path(R1), path(R2), val(attb_name), val(attp_name),val(umi_type),val(probes_name),val(cargo),val(group)
@@ -202,8 +213,8 @@ process ADAPTER_AND_POLY_G_TRIM {
 
 process ALIGN_READS {
     cache 'lenient'
-    publishDir "${params.outdir}/initial_alignments/${sample_name}/", pattern: '*_initial_alignment.bam*'
-    publishDir "${params.outdir}/deduped_alignments/${sample_name}/", pattern: '*_deduped_alignment.bam*'
+    publishDir "${params.outdir}/initial_alignments/${sample_name}/", pattern: '*_initial_alignment.bam*', overwrite: true
+    publishDir "${params.outdir}/deduped_alignments/${sample_name}/", pattern: '*_deduped_alignment.bam*', overwrite: true
 
     input:
         tuple val(sample_name), val(group), val(umi_type), path(merged_fastq), path(unmerged_r1), path(unmerged_r2), val(cargo), path(genome_reference), path(reference_index)
@@ -256,7 +267,7 @@ process ALIGN_READS {
 
 process EXTRACT_TARGET_READS {
     cache 'lenient'
-    publishDir "${params.outdir}/probe_specific_reads/${sample_name}/"
+    publishDir "${params.outdir}/probe_specific_reads/${sample_name}/", overwrite: true
     input:
         tuple val(sample_name), val(group), path(target_info), path(bam_file), path(bam_file_index)
     output:
@@ -271,7 +282,7 @@ process EXTRACT_TARGET_READS {
 
 process GENERATE_AMPLICONS {
     cache 'lenient'
-    publishDir "${params.outdir}/generated_amplicons/${sample_name}/"
+    publishDir "${params.outdir}/generated_amplicons/${sample_name}/", overwrite: true
     input:
         tuple val(sample_name), val(group), path(target_info)
     output:
@@ -284,7 +295,7 @@ process GENERATE_AMPLICONS {
 
 process ALIGN_TARGET_READS {
     cache 'lenient'
-    publishDir "${params.outdir}/read_to_probe_alignment/${sample_name}/", pattern:'*.bam*'
+    publishDir "${params.outdir}/read_to_probe_alignment/${sample_name}/", pattern:'*.bam*', overwrite: true
     input:
         tuple val(sample_name), val(group), path(target_info), path(fastq_files), path(amplicon_files)
     output:
@@ -297,7 +308,7 @@ process ALIGN_TARGET_READS {
 
 process MEASURE_INTEGRATION {
     cache 'lenient'
-    publishDir "${params.outdir}/integration_stats_tables/${sample_name}/", pattern: '*integration_stats.csv'
+    publishDir "${params.outdir}/integration_stats_tables/${sample_name}/", pattern: '*integration_stats.csv', overwrite: true
     input:
         tuple val(sample_name), val(group), path(target_info), path(alignments)
     output:
@@ -313,17 +324,27 @@ process UPDATE_BENCHLING_WITH_VALIDATED_SITES {
     input:
         val project_id
         tuple val(sample_name), val(group), path(integration_csv)
+        val benchling_warehouse_username
+        val benchling_warehouse_password
+        val benchling_warehouse_url
+        val benchling_sdk_api_key
+        val benchling_api_url
     output:
 
     script:
     """
-    update_benchling_with_offtargets.py --project_id ${project_id} --integration_csv ${integration_csv}
+    export WAREHOUSE_USERNAME='${benchling_warehouse_username}'
+    export WAREHOUSE_PASSWORD='${benchling_warehouse_password}'
+    export WAREHOUSE_URL='${benchling_warehouse_url}'
+    export API_KEY='${benchling_sdk_api_key}'
+    export API_URL='${benchling_api_url}'
+    update_benchling_with_offtargets.py --project_id "${project_id}" --integration_csv ${integration_csv}
     """
 }
 
 process GATHER_QC_INFO {
     cache 'lenient'
-    publishDir "${params.outdir}/qc_info/${sample_name}/"
+    publishDir "${params.outdir}/qc_info/${sample_name}/", overwrite: true
     input:
         tuple val(sample_name), val(group), path(json_file),path(original_bam_file), path(original_bam_file_index),path(deduped_bam_file), path(deduped_bam_file_index)
     output:
@@ -336,10 +357,7 @@ process GATHER_QC_INFO {
 
 process ALIGNMENT_VISUALIZATION {
     cache 'lenient'
-    publishDir "${params.outdir}/alignment_visualizations/${sample_name}/attL_alignments/", pattern:'*attL*.html'
-    publishDir "${params.outdir}/alignment_visualizations/${sample_name}/attR_alignments/", pattern:'*attR*.html'
-    publishDir "${params.outdir}/alignment_visualizations/${sample_name}/beacon_alignments/", pattern:'*beacon*.html'
-    publishDir "${params.outdir}/alignment_visualizations/${sample_name}/wt_alignments/", pattern:'*wt*.html'
+    publishDir "${params.outdir}/alignment_visualizations/${sample_name}/", pattern:'*.html', overwrite: true
 
     input:
         tuple val(sample_name), val(group), path(target_info), path(amplicons), path(probe_read_alignments), path(edited_reads)
@@ -356,14 +374,13 @@ process ALIGNMENT_VISUALIZATION {
 
 process GENERATE_REPORT {
     cache 'lenient'
-    publishDir "${params.outdir}"
+    publishDir "${params.outdir}", overwrite: true
     input:
         path project_config_file
         path integration_stats_files
         path read_counts_per_site_files
         path qc_summary_files
         path extracted_reads
-        val collapse_condition
         val project_name
     output:
         path "*.xlsx", emit: excel_output
@@ -371,13 +388,13 @@ process GENERATE_REPORT {
     script:
         """
         ulimit -s 65536
-        collate_results.py --project_config_file ${project_config_file} --integration_stats_files ${integration_stats_files} --read_counts_per_site_files ${read_counts_per_site_files} --qc_summary_files ${qc_summary_files} --extracted_reads_dirs ${extracted_reads} --collapse_condition ${collapse_condition} --project_name ${project_name}
+        collate_results.py --project_config_file ${project_config_file} --integration_stats_files ${integration_stats_files} --read_counts_per_site_files ${read_counts_per_site_files} --qc_summary_files ${qc_summary_files} --extracted_reads_dirs ${extracted_reads} --project_name "${project_name}"
         """
     }
 
 process MULTIQC {
     cache 'lenient'
-    publishDir "${params.outdir}"
+    publishDir "${params.outdir}", overwrite: true
     input:
         path fastp_jsons
     output:
@@ -392,7 +409,7 @@ process MULTIQC {
 
 process CREATE_PYTHON_NOTEBOOK_REPORT {
     cache 'lenient'
-    publishDir "${params.outdir}"
+    publishDir "${params.outdir}", overwrite: true
 
     input:
         path excel_file
@@ -419,16 +436,20 @@ process CREATE_QUILT_PACKAGE {
         val benchling_warehouse_url
         val benchling_sdk_api_key
         val benchling_api_url
+        val aws_access_key_id
+        val aws_secret_access_key
     output:
 
     script:
     """
+    aws configure set aws_access_key_id ${aws_access_key_id}
+    aws configure set aws_secret_access_key ${aws_secret_access_key}
     export WAREHOUSE_USERNAME='${benchling_warehouse_username}'
     export WAREHOUSE_PASSWORD='${benchling_warehouse_password}'
     export WAREHOUSE_URL='${benchling_warehouse_url}'
     export API_KEY='${benchling_sdk_api_key}'
     export API_URL='${benchling_api_url}'
-    create_quilt_package.py --output_folder ${workflow.launchDir}/${output_folder} --project_id ${project_id} --bucket_name ${bucket_name} --package_name ${quilt_output}
+    create_quilt_package.py --output_folder ${workflow.launchDir}/${output_folder} --project_id "${project_id}" --bucket_name ${bucket_name} --package_name "${quilt_output}"
     """
 }
 
@@ -465,10 +486,11 @@ process TRANSLOCATION_DETECTION {
 }
 
 process INTERSECT_CAS_DATABASE {
-    publishDir "${params.outdir}/translocation/"
+    publishDir "${params.outdir}/translocation/", overwrite: true
 
     input:
         tuple val(sample_name), val(group), path(target_info), val(cargo_name), path(bnd_file)
+
     output:
         path '*.cas.bed', emit: cas_bed
         path '*.cargo.cas.csv', emit: cargo_cas_bed
@@ -486,6 +508,7 @@ process INTERSECT_CAS_DATABASE {
     else
          touch ${sample_name}.cargo.cas.csv
     fi
+
     """
 }
 
@@ -512,7 +535,6 @@ workflow {
          initial mapper: ${params.initial_mapper}
          attP, left side: ${params.ATTP_REG}
          attP, right side: ${params.ATTP_PRIME}
-         collapse condition: ${params.collapse_condition}
          --
          run as       : ${workflow.commandLine}
          started at   : ${workflow.start}
@@ -521,7 +543,7 @@ workflow {
          """
          .stripIndent()
 
-    raw_reads = DOWNLOAD_READS(params.project_id)
+    raw_reads = DOWNLOAD_READS(params.project_id,params.BS_ACCESS_TOKEN,params.BS_API_SERVER)
     samplesheet = GET_PROJECT_INFO(params.project_id,raw_reads,params.BENCHLING_WAREHOUSE_USERNAME,params.BENCHLING_WAREHOUSE_PASSWORD,params.BENCHLING_WAREHOUSE_URL,params.BENCHLING_API_KEY,params.BENCHLING_API_URL)
 
     // Existing logic to handle FASTQ file input
@@ -547,7 +569,7 @@ workflow {
         .unique()                   // Remove duplicates to get unique items
         .set {unique_species_ch}                     // Print the unique items
 
-    reference_genome = DOWNLOAD_REFERENCE_GENOME(unique_species_ch)
+    reference_genome = DOWNLOAD_REFERENCE_GENOME(unique_species_ch,params.AWS_ACCESS_KEY_ID,params.AWS_SECRET_ACCESS_KEY)
     gtex_data = DOWNLOAD_GTEX_DATA()
     trimmed_and_merged_fastq = ADAPTER_AND_POLY_G_TRIM(input_ch)
 
@@ -596,7 +618,7 @@ workflow {
 
     measure_integration_out = MEASURE_INTEGRATION(measure_integration_input_ch)
 
-    // UPDATE_BENCHLING_WITH_VALIDATED_SITES(params.project_id,measure_integration_out.integration_stats_file)
+    UPDATE_BENCHLING_WITH_VALIDATED_SITES(params.project_id,measure_integration_out.integration_stats_file,params.BENCHLING_WAREHOUSE_USERNAME,params.BENCHLING_WAREHOUSE_PASSWORD,params.BENCHLING_WAREHOUSE_URL,params.BENCHLING_API_KEY,params.BENCHLING_API_URL)
 
     trimmed_and_merged_fastq.fastp_stats
         .combine(initial_alignment.original_alignment_bam,by:[0,1])
@@ -617,6 +639,8 @@ workflow {
         .map{ tuple -> tuple[2] }
         .collect()
         .set{integration_stats_files_ch}
+
+    integration_stats_files_ch.view()
 
     extract_target_reads_out.read_counts_per_site_file
         .collect(flat:false)
@@ -639,7 +663,7 @@ workflow {
         .collect()
         .set{extracted_reads_files_ch}
 
-    report_excel_file = GENERATE_REPORT(samplesheet,integration_stats_files_ch,read_counts_per_site_files_ch,qc_summary_files_ch,extracted_reads_files_ch, params.collapse_condition, params.project_id)
+    report_excel_file = GENERATE_REPORT(samplesheet,integration_stats_files_ch,read_counts_per_site_files_ch,qc_summary_files_ch,extracted_reads_files_ch, params.project_id)
 
     // ** MULTIQC REPORT **
     trimmed_and_merged_fastq.fastp_stats
@@ -662,10 +686,11 @@ workflow {
         .set{target_info_and_bnd_ch}
     intersect_cas_database_out = INTERSECT_CAS_DATABASE(target_info_and_bnd_ch)
 
+
     // ** CREATE HTML REPORT **
 
     html_report = CREATE_PYTHON_NOTEBOOK_REPORT(report_excel_file, params.notebook_template)
 
-    CREATE_QUILT_PACKAGE(params.outdir,html_report,intersect_cas_database_out.cas_bed.collect(),params.project_id,params.bucket_name,params.quilt_package_name,params.BENCHLING_WAREHOUSE_USERNAME,params.BENCHLING_WAREHOUSE_PASSWORD,params.BENCHLING_WAREHOUSE_URL,params.BENCHLING_API_KEY,params.BENCHLING_API_URL)
+    CREATE_QUILT_PACKAGE(params.outdir,html_report,intersect_cas_database_out.cas_bed.collect(),params.project_id,params.bucket_name,params.quilt_package_name,params.BENCHLING_WAREHOUSE_USERNAME,params.BENCHLING_WAREHOUSE_PASSWORD,params.BENCHLING_WAREHOUSE_URL,params.BENCHLING_API_KEY,params.BENCHLING_API_URL,params.AWS_ACCESS_KEY_ID,params.AWS_SECRET_ACCESS_KEY)
 
 }
