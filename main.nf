@@ -259,7 +259,7 @@ process EXTRACT_TARGET_READS {
 
     script:
     """
-    extract_target_reads.py --target_info ${target_info} --bam_file ${bam_file} --sample_name ${sample_name}
+    extract_target_reads.py --target_info ${target_info} --bam_file ${bam_file} --sample_name ${sample_name} --window_size 50
     """
 }
 

@@ -245,7 +245,7 @@ def get_target_info(cosmic_info,gtex_info,attp_name,reference_path,cargo_id, sam
             elif strand == '+':
                 cut_pos = len_genomic_seq_to_include + (int(end)-int(start)) - 1
 
-            flank_size = 3
+            flank_size = 2
             ot_quant_lower_bound = cut_pos - flank_size
             ot_quant_upper_bound = cut_pos + flank_size + 1
 
@@ -359,14 +359,14 @@ def get_target_info(cosmic_info,gtex_info,attp_name,reference_path,cargo_id, sam
             position_of_attR_dinucleotide_lower = len_cargo_to_include + len(attp_reg_seq) - length_of_dinucleotide + 1
             position_of_attR_dinucleotide_upper = len_cargo_to_include + len(attp_reg_seq)
 
-            beacon_quant_lower_bound = position_of_beacon_dinucleotide_lower - 3
-            beacon_quant_upper_bound = position_of_beacon_dinucleotide_upper + 3
+            beacon_quant_lower_bound = position_of_beacon_dinucleotide_lower - 2
+            beacon_quant_upper_bound = position_of_beacon_dinucleotide_upper + 2
 
-            attL_quant_lower_bound = position_of_attL_dinucleotide_lower - 3
-            attL_quant_upper_bound = position_of_attL_dinucleotide_upper + 3
+            attL_quant_lower_bound = position_of_attL_dinucleotide_lower - 2
+            attL_quant_upper_bound = position_of_attL_dinucleotide_upper + 2
 
-            attR_quant_lower_bound = position_of_attR_dinucleotide_lower - 3
-            attR_quant_upper_bound = position_of_attR_dinucleotide_upper + 3
+            attR_quant_lower_bound = position_of_attR_dinucleotide_lower - 2
+            attR_quant_upper_bound = position_of_attR_dinucleotide_upper + 2
 
             wt_quant_lower_bound = 1
             wt_quant_upper_bound = len(wt_sequence)
@@ -478,14 +478,14 @@ def get_target_info(cosmic_info,gtex_info,attp_name,reference_path,cargo_id, sam
             position_of_attR_dinucleotide_lower = len_cargo_to_include + len(attp_reg_seq) - length_of_dinucleotide + 1
             position_of_attR_dinucleotide_upper = len_cargo_to_include + len(attp_reg_seq)
 
-            beacon_quant_lower_bound = position_of_beacon_dinucleotide_lower - 3
-            beacon_quant_upper_bound = position_of_beacon_dinucleotide_upper + 3
+            beacon_quant_lower_bound = position_of_beacon_dinucleotide_lower - 2
+            beacon_quant_upper_bound = position_of_beacon_dinucleotide_upper + 2
 
-            attL_quant_lower_bound = position_of_attL_dinucleotide_lower - 3
-            attL_quant_upper_bound = position_of_attL_dinucleotide_upper + 3
+            attL_quant_lower_bound = position_of_attL_dinucleotide_lower - 2
+            attL_quant_upper_bound = position_of_attL_dinucleotide_upper + 2
 
-            attR_quant_lower_bound = position_of_attR_dinucleotide_lower - 3
-            attR_quant_upper_bound = position_of_attR_dinucleotide_upper + 3
+            attR_quant_lower_bound = position_of_attR_dinucleotide_lower - 2
+            attR_quant_upper_bound = position_of_attR_dinucleotide_upper + 2
 
             beacon_quant_window_string = id + ':dinuc:' + str(beacon_quant_lower_bound) + '-' + str(beacon_quant_upper_bound) + ':0'
             attL_quant_window_string = id + ':dinuc:' + str(attL_quant_lower_bound) + '-' + str(attL_quant_upper_bound) + ':0'
