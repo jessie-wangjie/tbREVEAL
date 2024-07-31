@@ -28,7 +28,8 @@ def get_project_info(project_id):
                     R1 = entry_path  # Store the absolute path
                 elif "R2" in entry_path:
                     R2 = entry_path  # Store the absolute path
-
+        if probes:
+            hybrid_capture_panel = probes
         if R1 and R2:  # Ensure both R1 and R2 are found before adding to the dictionary
             if primers and not umi_type:
                 sample_info[sample_name] = (R1, R2, species, attb, attp, primers, hybrid_capture_panel, donor, group)

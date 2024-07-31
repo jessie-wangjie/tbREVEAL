@@ -41,11 +41,13 @@ def get_attp_info(attp):
 
 def download_probes_file(probes_name):
     probes_name = ';'.join(probes_name.strip("[]").replace("'", "").split(","))
-    print(probes_name)
-    panel_query ='''
-        SELECT probes_bed_file FROM hcpanel WHERE id = %s
-        '''
-    cur.execute(panel_query, [probes_name])
+    panel_query = '''
+        SELECT probes_bed_file
+        FROM hcpanel
+        WHERE name$ = %s OR id = %s
+    '''
+
+    cur.execute(panel_query, [probes_name,probes_name])
     probes_query_result = cur.fetchone()
 
     if probes_query_result is not None:
@@ -332,8 +334,6 @@ def get_target_info(cosmic_info,gtex_info,attp_name,reference_path,cargo_id, sam
                 attL = (reverse_complement(beacon_end_sequence) + b_reg_sequence + attp_prime_seq).upper()
                 attR = (attp_reg_seq + b_prime_sequence + reverse_complement(beacon_beginning_sequence)).upper()
 
-            print(beacon_beginning_sequence)
-            print(beacon_end_sequence)
             # store cargo sequence so we can search for subsequence locations
             with open('cargo.fasta', 'r') as f:
                 cargo_sequence = ''.join(line.strip() for line in f if not line.startswith('>')).upper()

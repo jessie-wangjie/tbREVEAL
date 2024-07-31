@@ -154,13 +154,22 @@ process GENERATE_REFERENCE_CARGO_GENOME {
     input:
         each cargo_name
         path reference_fasta
-
+        val benchling_warehouse_username
+        val benchling_warehouse_password
+        val benchling_warehouse_url
+        val benchling_sdk_api_key
+        val benchling_api_url
     output:
         tuple val(cargo_name), path("ref_*.fa"), emit: reference_fasta
         tuple val(cargo_name), path("*.{fa,fna,fasta}.*"), emit: reference_index
 
     script:
     """
+    export WAREHOUSE_USERNAME='${benchling_warehouse_username}'
+    export WAREHOUSE_PASSWORD='${benchling_warehouse_password}'
+    export WAREHOUSE_URL='${benchling_warehouse_url}'
+    export API_KEY='${benchling_sdk_api_key}'
+    export API_URL='${benchling_api_url}'
     get_cargo_seq.py --cargo "${cargo_name}"
     cargo_id=`grep \\> cargo.fasta | sed -e 's/>//'`
     cat ${reference_fasta} cargo.fasta > ref_\${cargo_id}.fa
@@ -585,7 +594,7 @@ workflow {
     probe_information.cargo_reference.map { it[2] }
         .unique()
         .set { cargo_ch }
-    reference_cargo_genome = GENERATE_REFERENCE_CARGO_GENOME(cargo_ch, reference_genome.reference_fasta)
+    reference_cargo_genome = GENERATE_REFERENCE_CARGO_GENOME(cargo_ch, reference_genome.reference_fasta,params.BENCHLING_WAREHOUSE_USERNAME,params.BENCHLING_WAREHOUSE_PASSWORD,params.BENCHLING_WAREHOUSE_URL,params.BENCHLING_API_KEY,params.BENCHLING_API_URL)
 
     probe_information.cargo_reference
         .map { [it[2], it[0], it[1]] }
