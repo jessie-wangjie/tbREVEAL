@@ -190,6 +190,7 @@ process ADAPTER_AND_POLY_G_TRIM {
 
 process ALIGN_READS {
     cache 'lenient'
+    maxForks 12
     publishDir "${params.outdir}/initial_alignments/${sample_name}/", pattern: '*_initial_alignment.bam*', overwrite: true
     publishDir "${params.outdir}/deduped_alignments/${sample_name}/", pattern: '*_deduped_alignment.bam*', overwrite: true
 
