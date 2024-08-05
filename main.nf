@@ -125,7 +125,7 @@ process GET_TARGET_INFORMATION {
     cache 'lenient'
     publishDir "${params.outdir}/full_probe_info/${sample_name}/", overwrite: true
     input:
-        tuple val(sample_name),val(species),path(R1), path(R2), val(attb_name), val(attp_name),val(umi_type),val(probes_name),val(cargo),val(group),path(reference_genome), path(reference_index1),path(reference_index2),path(reference_index3),path(reference_index4),path(reference_index5),path(reference_index6)
+        tuple val(sample_name), val(species), path(R1), path(R2), val(attb_name), val(attp_name), val(umi_type), val(probes_name), val(cargo), val(group), path(reference_genome), path(reference_index)
         path cosmic_info
         path gtex_info
         val benchling_warehouse_username
@@ -136,7 +136,7 @@ process GET_TARGET_INFORMATION {
 
     output:
         tuple val(sample_name), val(group), path("${sample_name}_target_info.csv"), emit: target_info
-        tuple val(sample_name), val(group), path("cargo.fasta"), emit: cargo_reference
+        tuple val(sample_name), val(group), val(cargo), path("cargo.fasta"), emit: cargo_reference
 
     script:
         """
@@ -149,10 +149,38 @@ process GET_TARGET_INFORMATION {
         """
 }
 
+process GENERATE_REFERENCE_CARGO_GENOME {
+    cache 'lenient'
+    input:
+        tuple val(cargo_name), path(cargo_fasta)
+        path reference_fasta
+        val benchling_warehouse_username
+        val benchling_warehouse_password
+        val benchling_warehouse_url
+        val benchling_sdk_api_key
+        val benchling_api_url
+    output:
+        tuple val(cargo_name), path("ref_*.fa"), emit: reference_fasta
+        tuple val(cargo_name), path("*.{fa,fna,fasta}.*"), emit: reference_index
+
+    script:
+    """
+    export WAREHOUSE_USERNAME='${benchling_warehouse_username}'
+    export WAREHOUSE_PASSWORD='${benchling_warehouse_password}'
+    export WAREHOUSE_URL='${benchling_warehouse_url}'
+    export API_KEY='${benchling_sdk_api_key}'
+    export API_URL='${benchling_api_url}'
+    cat ${reference_fasta} ${cargo_fasta} > ref_${cargo_name}.fa
+    bwa index ref_${cargo_name}.fa
+    samtools faidx ref_${cargo_name}.fa
+    """
+}
+
 process ADAPTER_AND_POLY_G_TRIM {
     cache 'lenient'
-    publishDir "${params.outdir}/raw_fastq/${sample_name}/", pattern: '*.fastq.gz', overwrite: true
-    publishDir "${params.outdir}/trimmed_fastq/${sample_name}/", pattern: '*trimmed*.fastq.gz', overwrite: true
+    publishDir "${params.outdir}/raw_fastq/${sample_name}/", pattern: '*_R[1|2]_*.fastq.gz'
+    publishDir "${params.outdir}/trimmed_fastq/${sample_name}/", pattern: '*trimmed*.fastq.gz'
+    publishDir "${params.outdir}/trimmed_fastq/${sample_name}/", pattern: '*unmerged*.fastq.gz'
     publishDir "${params.outdir}/input_probe_sheet/${sample_name}/", pattern: '*.csv', overwrite: true
 
     input:
@@ -160,12 +188,13 @@ process ADAPTER_AND_POLY_G_TRIM {
     output:
         path "${R1}"
         path "${R2}"
-        tuple val(sample_name), val(group), val(umi_type), path("${sample_name}_trimmed.fastq.gz"), emit: trimmed_fastq
+        tuple val(sample_name), val(group), val(umi_type), path("${sample_name}_trimmed.fastq.gz"), path("${sample_name}_unmerged.R1.fastq.gz"), path("${sample_name}_unmerged.R2.fastq.gz"), emit: trimmed_fastq
         tuple val(sample_name), val(group), path("${sample_name}_fastp.json"), emit: fastp_stats
     script:
         umi_loc = ''
         umi_len = ''
         umi_skip = ''
+        umi_type = "Twist"
 
         if (umi_type == "Twist") {
             umi_loc = 'per_read'
@@ -184,7 +213,8 @@ process ADAPTER_AND_POLY_G_TRIM {
             umi_params = ""
         }
         """
-        fastp -m -c --dont_eval_duplication --disable_adapter_trimming --low_complexity_filter --overlap_len_require 10 -i ${R1} -I ${R2} --merged_out ${sample_name}_trimmed.fastq.gz --include_unmerged -w 16 -g -j ${sample_name}_fastp.json -U ${umi_params} --adapter_sequence AGATCGGAAGAGCACACGTCTGAACTCCAGTCA --adapter_sequence_r2 AGATCGGAAGAGCGTCGTGTAGGGAAAGAGTGT
+        fastp -m -c --dont_eval_duplication --disable_adapter_trimming --low_complexity_filter --overlap_len_require 10 -i ${R1} -I ${R2} --merged_out ${sample_name}_merged.fastq.gz --out1 ${sample_name}_unmerged.R1.fastq.gz --out2 ${sample_name}_unmerged.R2.fastq.gz --unpaired1 ${sample_name}_unpaired.fastq.gz --unpaired2 ${sample_name}_unpaired.fastq.gz -w 16 -g -j ${sample_name}_fastp.json -U ${umi_params} --adapter_sequence AGATCGGAAGAGCACACGTCTGAACTCCAGTCA --adapter_sequence_r2 AGATCGGAAGAGCGTCGTGTAGGGAAAGAGTGT
+        zcat ${sample_name}_merged.fastq.gz ${sample_name}_unpaired.fastq.gz | gzip > ${sample_name}_trimmed.fastq.gz
         """
 }
 
@@ -195,7 +225,7 @@ process ALIGN_READS {
     publishDir "${params.outdir}/deduped_alignments/${sample_name}/", pattern: '*_deduped_alignment.bam*', overwrite: true
 
     input:
-        tuple val(sample_name), val(group), val(umi_type), path(fastq), path(genome_reference), path(reference_index1),path(reference_index2),path(reference_index3),path(reference_index4),path(reference_index5),path(reference_index6),path(cargo_reference)
+        tuple val(sample_name), val(group), val(umi_type), path(merged_fastq), path(unmerged_r1), path(unmerged_r2), val(cargo), path(genome_reference), path(reference_index)
         val initial_mapper
     output:
         tuple val(sample_name), val(group), path("${sample_name}_initial_alignment.bam"), path("${sample_name}_initial_alignment.bam.bai"), emit: original_alignment_bam
@@ -207,34 +237,28 @@ process ALIGN_READS {
     if (initial_mapper == "minimap2") {
         alignment_command = "minimap2 -ax sr -t 96 ${genome_reference} ${fastq}"
     } else if (initial_mapper == "bwa") {
-        alignment_command = "bwa mem -t 96 ${genome_reference} ${fastq}"
-        cargo_alignment_command = "bwa mem -t 96 ${cargo_reference}"
+        alignment_command = "bwa mem -Y -t 32 ${genome_reference}"
     } else {
         error "Unsupported initial_mapper: $initial_mapper"
     }
     if (umi_type != "None") {
         """
-        $alignment_command | sambamba view -S -t 96 -f bam -o ${sample_name}_initial_alignment.bam /dev/stdin
-        sambamba sort --show-progress -t 96 -o ${sample_name}_initial_alignment_sorted.bam ${sample_name}_initial_alignment.bam
-        mv ${sample_name}_initial_alignment_sorted.bam ${sample_name}_initial_alignment.bam
-        mv ${sample_name}_initial_alignment_sorted.bam.bai ${sample_name}_initial_alignment.bam.bai
+        # align single-end reads
+        $alignment_command ${merged_fastq} > ${sample_name}_merged.sam
+        samtools sort ${sample_name}_merged.sam -@ 16 -o ${sample_name}_merged.bam
+        # align paired-end
+        $alignment_command ${unmerged_r1} ${unmerged_r2} > ${sample_name}_unmerged.sam
+        samtools sort ${sample_name}_unmerged.sam -@ 16 -o ${sample_name}_unmerged.bam
+
+        # merge
+        samtools merge ${sample_name}_merged.bam ${sample_name}_unmerged.bam -o ${sample_name}_initial_alignment.bam
         samtools index ${sample_name}_initial_alignment.bam
+
+        # dedup in single-end mode
         umi_tools dedup -I ${sample_name}_initial_alignment.bam --umi-separator ":" -S ${sample_name}_deduped_alignment.bam --method unique
         samtools index ${sample_name}_deduped_alignment.bam
 
-        samtools view -f 4 ${sample_name}_initial_alignment.bam | samtools bam2fq | pigz -p 8 > ${sample_name}_unaligned_reads.fastq.gz
-        bwa index ${cargo_reference}
-        $cargo_alignment_command ${sample_name}_unaligned_reads.fastq.gz | sambamba view -S -t 96 -f bam -o ${sample_name}_unaligned_reads_aligned_to_cargo.bam /dev/stdin
-        sambamba sort --show-progress -t 96 -o ${sample_name}_unaligned_reads_aligned_to_cargo_sorted.bam ${sample_name}_unaligned_reads_aligned_to_cargo.bam
-        mv ${sample_name}_unaligned_reads_aligned_to_cargo_sorted.bam ${sample_name}_unaligned_reads_aligned_to_cargo.bam
-        mv ${sample_name}_unaligned_reads_aligned_to_cargo_sorted.bam.bai ${sample_name}_unaligned_reads_aligned_to_cargo.bam.bai
-        samtools index ${sample_name}_unaligned_reads_aligned_to_cargo.bam
-        umi_tools dedup -I ${sample_name}_unaligned_reads_aligned_to_cargo.bam --umi-separator ":" -S ${sample_name}_unaligned_reads_deduped_aligned_to_cargo.bam --method unique
-        samtools index ${sample_name}_unaligned_reads_deduped_aligned_to_cargo.bam
-
-        samtools merge -o final.bam ${sample_name}_deduped_alignment.bam ${sample_name}_unaligned_reads_deduped_aligned_to_cargo.bam
-        mv final.bam ${sample_name}_deduped_alignment.bam
-        samtools index ${sample_name}_deduped_alignment.bam
+        rm *.sam *_merged.bam *_unmerged.bam
         """
     } else {
         """
@@ -440,19 +464,34 @@ process CREATE_QUILT_PACKAGE {
 
 process TRANSLOCATION_DETECTION {
     cache 'lenient'
-    publishDir "${params.outdir}/translocation/", overwrite: true
+    publishDir "${params.outdir}/deduped_alignments/${sample_name}/", pattern:'*.dedup.ba*'
+    publishDir "${params.outdir}/deduped_alignments/${sample_name}/", pattern:'*.mark_duplicates.txt'
+    publishDir "${params.outdir}/translocation/", pattern:'*.svpileup.*'
+
     input:
-        tuple val(sample_name), val(group),path(target_info), path(cargo), path(bam_file), path(bam_file_index), path(reference_genome)
+        tuple val(sample_name), val(group), path(target_info), val(cargo_name), path(reference_genome), path(reference_index), path(bam_file), path(bam_file_index)
+
     output:
-        tuple val(sample_name), val(group), path("*.bnd.bed"), emit: bnd
-        path '*.vcf*'
+        tuple val(sample_name), val(group), val(cargo_name), path("*.svpileup.txt"), emit: bnd
+        file "*.svpileup.bam"
+        // file "*.dedup.ba*"
+        // file "*.mark_duplicates.txt"
+
     script:
     """
-    cat ${reference_genome} ${cargo} > combined_genomes.fasta
-    samtools faidx combined_genomes.fasta
-    delly call -g combined_genomes.fasta ${bam_file} -o ${sample_name}.delly.vcf -q 0 -r 0 -c 1 -z 0 -m 0 -t DEL,INV,BND &> log
-    bcftools query ${sample_name}.delly.vcf -i 'SVTYPE=\"BND\"' -f "%CHROM\\t%POS\\t%CHR2\\t%POS2\\t%ID\\t%PE\\t%SR\\n" > ${sample_name}.bnd.bed
-    bcftools query ${sample_name}.delly.vcf -i 'SVTYPE=\"INV\" || SVTYPE=\"DEL\"' -f "%CHROM\\t%POS\\t%CHROM\\t%END\\t%ID\\t%PE\\t%SR\\n" >> ${sample_name}.bnd.bed
+    # copy umi from read name
+    samtools view ${bam_file} -H > tmp.sam
+    samtools view ${bam_file} | sed -e 's/_/-/' >> tmp.sam
+    fgbio -Dsamjdk.use_async_io_read_samtools=true CopyUmiFromReadName --input tmp.sam --output ${sample_name}.umi_from_read_name.bam
+
+    # mark duplicates
+    # picard -Dsamjdk.use_async_io_read_samtools=true -Duse_async_io_write_samtools=true MarkDuplicates --INPUT ${sample_name}.umi_from_read_name.bam --OUTPUT ${sample_name}.dedup.bam --METRICS_FILE ${sample_name}.mark_duplicates.txt --CREATE_INDEX --BARCODE_TAG RX --DUPLEX_UMI true
+
+    # Collates a pileup of sv supporting reads.
+    fgsv -Dsamjdk.use_async_io_read_samtools=true SvPileup --input=${sample_name}.umi_from_read_name.bam --output=${sample_name}.svpileup
+
+    # rm tmp.sam *.umi_from_read_name.ba*
+    rm tmp.sam
     """
 }
 
@@ -460,26 +499,26 @@ process INTERSECT_CAS_DATABASE {
     publishDir "${params.outdir}/translocation/", overwrite: true
 
     input:
-        val dinucleotides
-        tuple val(sample_name), val(group), path(bnd_file)
-        val benchling_warehouse_username
-        val benchling_warehouse_password
-        val benchling_warehouse_url
-        val benchling_sdk_api_key
-        val benchling_api_url
+        tuple val(sample_name), val(group), path(target_info), val(cargo_name), path(bnd_file)
+
     output:
         path '*.cas.bed', emit: cas_bed
+        path '*.cargo.cas.csv', emit: cargo_cas_bed
 
     script:
-    def args = dinucleotides == "" ? "": "--dinucleotides ${dinucleotides}"
     """
-    export WAREHOUSE_USERNAME='${benchling_warehouse_username}'
-    export WAREHOUSE_PASSWORD='${benchling_warehouse_password}'
-    export WAREHOUSE_URL='${benchling_warehouse_url}'
-    export API_KEY='${benchling_sdk_api_key}'
-    export API_URL='${benchling_api_url}'
-    get_cas_info.py $args | sort -k1,1 -k2,2n | bedtools groupby -g 1,2,3 -c 4,5,6 -o distinct,distinct,distinct > CAS.cut.bed
-    awk -F \"\\t\" '{OFS=\"\\t\"; print \$1,\$2-1,\$2,\$5,\$6+\$7\"\\n\"\$3,\$4-1,\$4,\$5,\$6+\$7}' ${bnd_file} | sort -k1,1 -k2,2n | bedtools closest -a stdin -b CAS.cut.bed -d | awk -F \"\\t\" '{OFS=\"\\t\"; if(\$12<=10 && \$12>=0) print}' > ${sample_name}.bnd.cas.bed
+    cut -f1 -d "," $target_info | grep -v id | sort -u > CAS.list
+    get_cas_info.py --cas CAS.list | sort -k1,1 -k2,2n | bedtools groupby -g 1,2,3 -c 4 -o distinct -delim "_" > CAS.cut.bed
+    grep -v id ${bnd_file} | awk -F "\\t" '{OFS="\\t"; print \$2,\$3-1,\$3,\$1,\$8,\$9"\\n"\$5,\$6-1,\$6,\$1,\$8,\$9}' | sort -k1,1 -k2,2n | bedtools closest -a stdin -b CAS.cut.bed -d -nonamecheck | awk -F "\\t" '{OFS="\\t"; if(\$11<=5 && \$11>=0) print}' | sort -k4n > ${sample_name}.bnd.cas.bed
+
+    grep -v id ${bnd_file} | grep ${cargo_name} | awk -F "\\t" '{OFS="\\t"; print \$2,\$3-1,\$3,\$1,\$8,\$9"\\n"\$5,\$6-1,\$6,\$1,\$8,\$9}' | sort -k1,1 -k2,2n | bedtools closest -a stdin -b CAS.cut.bed -d -nonamecheck | awk -F "\\t" '{OFS="\\t"; if(\$11>0 && \$11<=100) print }' > tmp
+    if [ -s tmp ]
+    then
+         sort -k10 tmp | bedtools groupby -g 10 -c 4 -o count > ${sample_name}.cargo.cas.csv
+    else
+         touch ${sample_name}.cargo.cas.csv
+    fi
+
     """
 }
 
@@ -517,7 +556,6 @@ workflow {
     raw_reads = DOWNLOAD_READS(params.project_id,params.BS_ACCESS_TOKEN,params.BS_API_SERVER)
     samplesheet = GET_PROJECT_INFO(params.project_id,raw_reads,params.BENCHLING_WAREHOUSE_USERNAME,params.BENCHLING_WAREHOUSE_PASSWORD,params.BENCHLING_WAREHOUSE_URL,params.BENCHLING_API_KEY,params.BENCHLING_API_URL)
 
-
     // Existing logic to handle FASTQ file input
     samplesheet
     .splitCsv(header: true, sep: ',')
@@ -547,19 +585,29 @@ workflow {
 
     input_ch
         .combine(reference_genome.reference_fasta)
-        .combine(reference_genome.reference_index)
+        .combine(reference_genome.reference_index.toList())
         .set{probe_info_input_ch}
-
     probe_information = GET_TARGET_INFORMATION(probe_info_input_ch,params.cosmic_info,gtex_data,params.BENCHLING_WAREHOUSE_USERNAME,params.BENCHLING_WAREHOUSE_PASSWORD,params.BENCHLING_WAREHOUSE_URL,params.BENCHLING_API_KEY,params.BENCHLING_API_URL)
 
     amplicon_files = GENERATE_AMPLICONS(probe_information.target_info)
 
-    trimmed_and_merged_fastq.trimmed_fastq
-        .combine(reference_genome.reference_fasta)
-        .combine(reference_genome.reference_index)
-        .combine(probe_information.cargo_reference,by:[0,1])
-        .set{align_reads_input_ch}
+    // generate ref and cargo reference
+    probe_information.cargo_reference.map { it[2] }
+        .unique()
+        .join(probe_information.cargo_reference.map { [it[2],it[3]] } )
+        .set { cargo_ch }
+    reference_cargo_genome = GENERATE_REFERENCE_CARGO_GENOME(cargo_ch, reference_genome.reference_fasta,params.BENCHLING_WAREHOUSE_USERNAME,params.BENCHLING_WAREHOUSE_PASSWORD,params.BENCHLING_WAREHOUSE_URL,params.BENCHLING_API_KEY,params.BENCHLING_API_URL)
 
+    probe_information.cargo_reference
+        .map { [it[2], it[0], it[1]] }
+        .combine(reference_cargo_genome.reference_fasta, by:[0])
+        .combine(reference_cargo_genome.reference_index, by:[0])
+        .map { [it[1], it[2], it[0], it[3], it[4]]}
+        .set { ref_ch }
+
+    trimmed_and_merged_fastq.trimmed_fastq
+        .combine(ref_ch, by:[0,1])
+        .set{align_reads_input_ch}
     initial_alignment = ALIGN_READS(align_reads_input_ch, params.initial_mapper)
 
     probe_information.target_info
@@ -640,14 +688,16 @@ workflow {
 
     // ** TRANSLOCATION DETECTION **
     probe_information.target_info
-        .combine(probe_information.cargo_reference, by: [0,1])
-        .combine(initial_alignment.deduped_alignment_bam, by: [0,1])
-        .combine(reference_genome.reference_fasta)
+        .combine(ref_ch, by: [0,1])
+        .combine(initial_alignment.original_alignment_bam, by: [0,1])
         .set{translocation_detection_input_ch}
-
     TRANSLOCATION_DETECTION(translocation_detection_input_ch)
 
-    intersect_cas_database_out = INTERSECT_CAS_DATABASE(params.dinucleotides, TRANSLOCATION_DETECTION.out.bnd,params.BENCHLING_WAREHOUSE_USERNAME,params.BENCHLING_WAREHOUSE_PASSWORD,params.BENCHLING_WAREHOUSE_URL,params.BENCHLING_API_KEY,params.BENCHLING_API_URL)
+    probe_information.target_info
+        .combine(TRANSLOCATION_DETECTION.out.bnd, by: [0,1])
+        .set{target_info_and_bnd_ch}
+    intersect_cas_database_out = INTERSECT_CAS_DATABASE(target_info_and_bnd_ch)
+
 
     // ** CREATE HTML REPORT **
 

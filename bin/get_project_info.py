@@ -10,9 +10,10 @@ import pandas as pd
 def get_project_info(project_id):
 
     metadata_query = '''
-    SELECT sample_name,sequencing_sample_name,attb,attp,primers,hybrid_capture_panel,probes_or_barcodes,umi_type,species,probes_or_barcodes,donor,"group"
-    FROM tomebiosciences.genomic_assays_metadata$raw
-    WHERE genomics_project_queue = %s and archived$ = false
+    SELECT sample_name,sequencing_sample_name,attb,attp,primers,hybrid_capture_panel,umi_type,species,probes_or_barcodes,registry_entity.file_registry_id,"group"
+    FROM tomebiosciences.genomic_assays_metadata$raw 
+    JOIN registry_entity on registry_entity.name = donor 
+    WHERE genomics_project_queue = %s and genomic_assays_metadata$raw.archived$ = false
     '''
     cur.execute(metadata_query, [project_id])
     metadata_query_result = cur.fetchall()
@@ -28,7 +29,8 @@ def get_project_info(project_id):
                     R1 = entry_path  # Store the absolute path
                 elif "R2" in entry_path:
                     R2 = entry_path  # Store the absolute path
-
+        if probes:
+            hybrid_capture_panel = probes
         if R1 and R2:  # Ensure both R1 and R2 are found before adding to the dictionary
             if primers and not umi_type:
                 if umi_type != 'LMPCR':
