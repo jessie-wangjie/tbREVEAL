@@ -152,7 +152,7 @@ process GET_TARGET_INFORMATION {
 process GENERATE_REFERENCE_CARGO_GENOME {
     cache 'lenient'
     input:
-        each cargo_name
+        tuple val(cargo_name), path(cargo_fasta)
         path reference_fasta
         val benchling_warehouse_username
         val benchling_warehouse_password
@@ -170,11 +170,9 @@ process GENERATE_REFERENCE_CARGO_GENOME {
     export WAREHOUSE_URL='${benchling_warehouse_url}'
     export API_KEY='${benchling_sdk_api_key}'
     export API_URL='${benchling_api_url}'
-    get_cargo_seq.py --cargo "${cargo_name}"
-    cargo_id=`grep \\> cargo.fasta | sed -e 's/>//'`
-    cat ${reference_fasta} cargo.fasta > ref_\${cargo_id}.fa
-    bwa index ref_\${cargo_id}.fa
-    samtools faidx ref_\${cargo_id}.fa
+    cat ${reference_fasta} ${cargo_fasta} > ref_${cargo_name}.fa
+    bwa index ref_${cargo_name}.fa
+    samtools faidx ref_${cargo_name}.fa
     """
 }
 
@@ -485,7 +483,7 @@ process TRANSLOCATION_DETECTION {
     fgbio -Dsamjdk.use_async_io_read_samtools=true CopyUmiFromReadName --input tmp.sam --output ${sample_name}.umi_from_read_name.bam
 
     # mark duplicates
-    picard -Dsamjdk.use_async_io_read_samtools=true -Duse_async_io_write_samtools=true MarkDuplicates --INPUT ${sample_name}.umi_from_read_name.bam --OUTPUT ${sample_name}.dedup.bam --METRICS_FILE ${sample_name}.mark_duplicates.txt --CREATE_INDEX --BARCODE_TAG RX
+    picard -Dsamjdk.use_async_io_read_samtools=true -Duse_async_io_write_samtools=true MarkDuplicates --INPUT ${sample_name}.umi_from_read_name.bam --OUTPUT ${sample_name}.dedup.bam --METRICS_FILE ${sample_name}.mark_duplicates.txt --CREATE_INDEX --BARCODE_TAG RX --DUPLEX_UMI true
 
     # Collates a pileup of sv supporting reads.
     fgsv -Dsamjdk.use_async_io_read_samtools=true SvPileup --input=${sample_name}.dedup.bam --output=${sample_name}.svpileup
@@ -593,6 +591,7 @@ workflow {
     // generate ref and cargo reference
     probe_information.cargo_reference.map { it[2] }
         .unique()
+        .join(probe_information.cargo_reference.map { [it[2],it[3]] } )
         .set { cargo_ch }
     reference_cargo_genome = GENERATE_REFERENCE_CARGO_GENOME(cargo_ch, reference_genome.reference_fasta,params.BENCHLING_WAREHOUSE_USERNAME,params.BENCHLING_WAREHOUSE_PASSWORD,params.BENCHLING_WAREHOUSE_URL,params.BENCHLING_API_KEY,params.BENCHLING_API_URL)
 

@@ -91,7 +91,9 @@ def download_probes_file(probes_name):
 
 def download_cargo_genome(cargo_id):
     cargo_query ='''
-    SELECT name,bases FROM dna_sequence WHERE name = %s
+    SELECT registry_entity.file_registry_id, dna_sequence.bases FROM registry_entity
+    JOIN dna_sequence on dna_sequence.id = registry_entity.id
+    WHERE registry_entity.file_registry_id = %s
     '''
 
     cur.execute(cargo_query, [cargo_id])
