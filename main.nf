@@ -472,8 +472,8 @@ process TRANSLOCATION_DETECTION {
     output:
         tuple val(sample_name), val(group), val(cargo_name), path("*.svpileup.txt"), emit: bnd
         file "*.svpileup.bam"
-        file "*.dedup.ba*"
-        file "*.mark_duplicates.txt"
+        // file "*.dedup.ba*"
+        // file "*.mark_duplicates.txt"
 
     script:
     """
@@ -483,12 +483,13 @@ process TRANSLOCATION_DETECTION {
     fgbio -Dsamjdk.use_async_io_read_samtools=true CopyUmiFromReadName --input tmp.sam --output ${sample_name}.umi_from_read_name.bam
 
     # mark duplicates
-    picard -Dsamjdk.use_async_io_read_samtools=true -Duse_async_io_write_samtools=true MarkDuplicates --INPUT ${sample_name}.umi_from_read_name.bam --OUTPUT ${sample_name}.dedup.bam --METRICS_FILE ${sample_name}.mark_duplicates.txt --CREATE_INDEX --BARCODE_TAG RX --DUPLEX_UMI true
+    # picard -Dsamjdk.use_async_io_read_samtools=true -Duse_async_io_write_samtools=true MarkDuplicates --INPUT ${sample_name}.umi_from_read_name.bam --OUTPUT ${sample_name}.dedup.bam --METRICS_FILE ${sample_name}.mark_duplicates.txt --CREATE_INDEX --BARCODE_TAG RX --DUPLEX_UMI true
 
     # Collates a pileup of sv supporting reads.
-    fgsv -Dsamjdk.use_async_io_read_samtools=true SvPileup --input=${sample_name}.dedup.bam --output=${sample_name}.svpileup
+    fgsv -Dsamjdk.use_async_io_read_samtools=true SvPileup --input=${sample_name}.umi_from_read_name.bam --output=${sample_name}.svpileup
 
-    rm tmp.sam *.umi_from_read_name.ba*
+    # rm tmp.sam *.umi_from_read_name.ba*
+    rm tmp.sam
     """
 }
 
