@@ -220,6 +220,7 @@ process ADAPTER_AND_POLY_G_TRIM {
 
 process ALIGN_READS {
     cache 'lenient'
+    maxForks 12
     publishDir "${params.outdir}/initial_alignments/${sample_name}/", pattern: '*_initial_alignment.bam*', overwrite: true
     publishDir "${params.outdir}/deduped_alignments/${sample_name}/", pattern: '*_deduped_alignment.bam*', overwrite: true
 
@@ -371,7 +372,7 @@ process ALIGNMENT_VISUALIZATION {
         val(bam2html_path)
     output:
         val(sample_name), emit: sample_name
-        path("*.html"), optional: true
+        path("*.html"), emit: alignment_viz_html, optional: true
 
     script:
     """
@@ -435,6 +436,7 @@ process CREATE_QUILT_PACKAGE {
         val output_folder
         path notebook_report
         path cas_bed
+        path alignment_viz
         val project_id
         val bucket_name
         val quilt_output
@@ -640,7 +642,8 @@ workflow {
         .combine(align_target_reads_out,by:[0,1])
         .combine(measure_integration_out.edited_reads,by:[0,1])
         .set{alignment_viz_input_ch}
-    ALIGNMENT_VISUALIZATION(alignment_viz_input_ch, params.bam2html_path)
+
+    alignment_viz_output = ALIGNMENT_VISUALIZATION(alignment_viz_input_ch, params.bam2html_path)
 
     measure_integration_out.integration_stats_file
         .collect(flat:false)
@@ -700,6 +703,6 @@ workflow {
 
     html_report = CREATE_PYTHON_NOTEBOOK_REPORT(report_excel_file, params.notebook_template)
 
-    CREATE_QUILT_PACKAGE(params.outdir,html_report,intersect_cas_database_out.cas_bed.collect(),params.project_id,params.bucket_name,params.quilt_package_name,params.BENCHLING_WAREHOUSE_USERNAME,params.BENCHLING_WAREHOUSE_PASSWORD,params.BENCHLING_WAREHOUSE_URL,params.BENCHLING_API_KEY,params.BENCHLING_API_URL,params.AWS_ACCESS_KEY_ID,params.AWS_SECRET_ACCESS_KEY)
+    CREATE_QUILT_PACKAGE(params.outdir,html_report,intersect_cas_database_out.cas_bed.collect(),alignment_viz_output.alignment_viz_html.collect(),params.project_id,params.bucket_name,params.quilt_package_name,params.BENCHLING_WAREHOUSE_USERNAME,params.BENCHLING_WAREHOUSE_PASSWORD,params.BENCHLING_WAREHOUSE_URL,params.BENCHLING_API_KEY,params.BENCHLING_API_URL,params.AWS_ACCESS_KEY_ID,params.AWS_SECRET_ACCESS_KEY)
 
 }
