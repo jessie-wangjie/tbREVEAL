@@ -1,7 +1,6 @@
 #!/usr/bin/env python
 
 import argparse
-import pysam
 import subprocess
 from Bio import SeqIO
 from Bio.Seq import Seq
@@ -13,6 +12,7 @@ import subprocess
 import sys
 import psycopg2
 from pathlib import Path
+import re
 
 def reverse_complement(seq):
     complement = {'A': 'T', 'C': 'G', 'G': 'C', 'T': 'A','N':'N'}
@@ -148,7 +148,7 @@ def get_target_info(cosmic_info,gtex_info,attp_name,reference_path,cargo_id, sam
     for index, row in df.iterrows():
 
         id = row['Target']
-        pair_ids = re.split(';|,', input_string)
+        pair_ids = re.split(';|,', id)
 
         for pair_id in pair_ids:
             if 'CAS' in pair_id:
