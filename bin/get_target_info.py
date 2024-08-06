@@ -148,12 +148,7 @@ def get_target_info(cosmic_info,gtex_info,attp_name,reference_path,cargo_id, sam
     for index, row in df.iterrows():
 
         id = row['Target']
-        if ',' in row['Target']:
-            pair_ids = row['Target'].split(',')
-        elif ';' in row['Target']:
-            pair_ids = row['Target'].split(';')
-        else:
-            pair_ids = row['Target'].split(' ')
+        pair_ids = re.split(';|,', input_string)
 
         for pair_id in pair_ids:
             if 'CAS' in pair_id:
