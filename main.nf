@@ -78,12 +78,17 @@ process DOWNLOAD_REFERENCE_GENOME {
         tuple val(reference_species), val(cargo_name)
         val aws_access_key_id
         val aws_secret_access_key
+        val benchling_warehouse_username
+        val benchling_warehouse_password
+        val benchling_warehouse_url
+        val benchling_sdk_api_key
+        val benchling_api_url
     output:
         tuple val(reference_species), val(cargo_name), path("${ref_name}_${cargo_name}/${ref_name}_${cargo_name}.fa"), path("${ref_name}_${cargo_name}/${ref_name}_${cargo_name}.fa.*"), path("cargo.fasta"), emit: reference_fasta
     script:
 
     if (reference_species == "Human" || reference_species == "Homo sapiens") {
-            ref_name = "hg38"
+        ref_name = "hg38"
     } else if (reference_species == "Mouse" || reference_species == "Mus musculus") {
         ref_name = "mm39"
     } else if (reference_species == "Monkey" || reference_species == "Macaca fascicularis" || reference_species == "NHP") {
@@ -91,10 +96,17 @@ process DOWNLOAD_REFERENCE_GENOME {
     }
 
     """
+
+    export WAREHOUSE_USERNAME='${benchling_warehouse_username}'
+    export WAREHOUSE_PASSWORD='${benchling_warehouse_password}'
+    export WAREHOUSE_URL='${benchling_warehouse_url}'
+    export API_KEY='${benchling_sdk_api_key}'
+    export API_URL='${benchling_api_url}'
+
     get_cargo_seq.py --cargo ${cargo_name}
 
-    # aws configure set aws_access_key_id ${aws_access_key_id}
-    # aws configure set aws_secret_access_key ${aws_secret_access_key}
+    aws configure set aws_access_key_id ${aws_access_key_id}
+    aws configure set aws_secret_access_key ${aws_secret_access_key}
     if [[ `aws s3 ls s3://tomebfx-data/references/bwa_index/${ref_name}_${cargo_name}/` != "" ]]
     then
         aws s3 sync s3://tomebfx-data/references/bwa_index/${ref_name}_${cargo_name}/ ${ref_name}_${cargo_name}
@@ -103,9 +115,11 @@ process DOWNLOAD_REFERENCE_GENOME {
         if [[ $cargo_name != "" ]]
         then
             ref=`ls ${ref_name}/*.fa`
+            mkdir ${ref_name}_${cargo_name}
             cat \$ref cargo.fasta > ${ref_name}_${cargo_name}/${ref_name}_${cargo_name}.fa
             bwa index ${ref_name}_${cargo_name}/${ref_name}_${cargo_name}.fa
             samtools faidx ${ref_name}_${cargo_name}/${ref_name}_${cargo_name}.fa
+            aws s3 sync ${ref_name}_${cargo_name} s3://tomebfx-data/references/bwa_index/${ref_name}_${cargo_name}/
         fi
     fi
     """
@@ -212,14 +226,14 @@ process ALIGN_READS {
         samtools view ${sample_name}_merged.sam -H > tmp.sam
         samtools view ${sample_name}_merged.sam | sed -e 's/_/-/' >> tmp.sam
         fgbio CopyUmiFromReadName --input tmp.sam --output ${sample_name}.umi_from_read_name.merged.bam --remove-umi true
-        picard MarkDuplicates --INPUT ${sample_name}.umi_from_read_name.merged.bam --OUTPUT ${sample_name}.dedup.se.bam --METRICS_FILE ${sample_name}.mark_duplicates.se.txt --BARCODE_TAG RX --ASSUME_SORT_ORDER queryname
+        picard MarkDuplicates --INPUT ${sample_name}.umi_from_read_name.merged.bam --OUTPUT ${sample_name}.dedup.se.bam --METRICS_FILE ${sample_name}.mark_duplicates.se.txt --BARCODE_TAG RX --ASSUME_SORT_ORDER queryname --REMOVE_DUPLICATES true
 
         # align paired-end
         $alignment_command ${unmerged_r1} ${unmerged_r2} > ${sample_name}_unmerged.sam
         samtools view ${sample_name}_unmerged.sam -H > tmp.sam
         samtools view ${sample_name}_unmerged.sam | sed -e 's/_/-/' >> tmp.sam
         fgbio CopyUmiFromReadName --input tmp.sam --output ${sample_name}.umi_from_read_name.unmerged.bam --remove-umi true
-        picard MarkDuplicates --INPUT ${sample_name}.umi_from_read_name.unmerged.bam --OUTPUT ${sample_name}.dedup.pe.bam --METRICS_FILE ${sample_name}.mark_duplicates.pe.txt --BARCODE_TAG RX --DUPLEX_UMI true --ASSUME_SORT_ORDER queryname
+        picard MarkDuplicates --INPUT ${sample_name}.umi_from_read_name.unmerged.bam --OUTPUT ${sample_name}.dedup.pe.bam --METRICS_FILE ${sample_name}.mark_duplicates.pe.txt --BARCODE_TAG RX --DUPLEX_UMI true --ASSUME_SORT_ORDER queryname --REMOVE_DUPLICATES true
 
         # merge
         samtools merge ${sample_name}.umi_from_read_name.merged.bam ${sample_name}.umi_from_read_name.unmerged.bam -n -o - | samtools sort - -o ${sample_name}_initial_alignment.bam
@@ -405,8 +419,8 @@ process CREATE_QUILT_PACKAGE {
     input:
         val output_folder
         path notebook_report
-        path cas_bed
-        path alignment_viz
+        val cas_bed
+        val alignment_viz
         val project_id
         val bucket_name
         val quilt_output
@@ -438,12 +452,23 @@ process TRANSLOCATION_DETECTION {
 
     input:
         tuple val(sample_name), val(group), path(target_info), path(bam_file), path(bam_file_index)
+        val benchling_warehouse_username
+        val benchling_warehouse_password
+        val benchling_warehouse_url
+        val benchling_sdk_api_key
+        val benchling_api_url
 
     output:
         tuple val(sample_name), val(group), path("*.svpileup.txt"), emit: bnd
 
     script:
     """
+    export WAREHOUSE_USERNAME='${benchling_warehouse_username}'
+    export WAREHOUSE_PASSWORD='${benchling_warehouse_password}'
+    export WAREHOUSE_URL='${benchling_warehouse_url}'
+    export API_KEY='${benchling_sdk_api_key}'
+    export API_URL='${benchling_api_url}'
+    export TMP_DIR=.
     # Collates a pileup of sv supporting reads.
     fgsv SvPileup --input=${bam_file} --output=${sample_name}.svpileup
 
@@ -510,7 +535,7 @@ workflow {
         .set {unique_species_ch}                     // Print the unique items
 
     // generate ref and cargo reference
-    reference_genome = DOWNLOAD_REFERENCE_GENOME(unique_species_ch,params.AWS_ACCESS_KEY_ID,params.AWS_SECRET_ACCESS_KEY)
+    reference_genome = DOWNLOAD_REFERENCE_GENOME(unique_species_ch,params.AWS_ACCESS_KEY_ID,params.AWS_SECRET_ACCESS_KEY,params.BENCHLING_WAREHOUSE_USERNAME,params.BENCHLING_WAREHOUSE_PASSWORD,params.BENCHLING_WAREHOUSE_URL,params.BENCHLING_API_KEY,params.BENCHLING_API_URL)
     gtex_data = DOWNLOAD_GTEX_DATA()
 
     input_ch
@@ -605,7 +630,7 @@ workflow {
     MULTIQC(multiqc_input_ch)
 
     // ** TRANSLOCATION DETECTION **
-    translocation=TRANSLOCATION_DETECTION(target_info_and_deduped_alignment_ch)
+    translocation=TRANSLOCATION_DETECTION(target_info_and_deduped_alignment_ch,params.BENCHLING_WAREHOUSE_USERNAME,params.BENCHLING_WAREHOUSE_PASSWORD,params.BENCHLING_WAREHOUSE_URL,params.BENCHLING_API_KEY,params.BENCHLING_API_URL )
 
     // ** CREATE HTML REPORT **
     html_report = CREATE_PYTHON_NOTEBOOK_REPORT(report_excel_file, params.notebook_template)
