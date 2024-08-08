@@ -595,8 +595,6 @@ workflow {
         .collect()
         .set{integration_stats_files_ch}
 
-    integration_stats_files_ch.view()
-
     extract_target_reads_out.read_counts_per_site_file
         .collect(flat:false)
         .flatMap{ it }
