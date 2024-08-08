@@ -176,8 +176,8 @@ process ADAPTER_AND_POLY_G_TRIM {
             umi_params = ""
         }
         """
-        fastp -m -c --dont_eval_duplication --low_complexity_filter --overlap_len_require 10 -i ${R1} -I ${R2} --merged_out ${sample_name}_merged.fastq.gz --out1 ${sample_name}_unmerged.R1.fastq.gz --out2 ${sample_name}_unmerged.R2.fastq.gz --unpaired1 ${sample_name}_unpaired.fastq.gz --unpaired2 ${sample_name}_unpaired.fastq.gz -w 16 -g -j ${sample_name}_fastp.json -U ${umi_params} --adapter_sequence AGATCGGAAGAGCACACGTCTGAACTCCAGTCA --adapter_sequence_r2 AGATCGGAAGAGCGTCGTGTAGGGAAAGAGTGT
-        zcat ${sample_name}_merged.fastq.gz ${sample_name}_unpaired.fastq.gz | gzip > ${sample_name}_trimmed.fastq.gz
+        fastp -m -c --dont_eval_duplication --disable_adapter_trimming --low_complexity_filter --overlap_len_require 10 -i ${R1} -I ${R2} --merged_out ${sample_name}_merged.fastq.gz --out1 ${sample_name}_unmerged.R1.fastq.gz --out2 ${sample_name}_unmerged.R2.fastq.gz --unpaired1 ${sample_name}_unpaired.fastq.gz --unpaired2 ${sample_name}_unpaired.fastq.gz -w 16 -g -j ${sample_name}_fastp.json -U ${umi_params} --adapter_sequence AGATCGGAAGAGCACACGTCTGAACTCCAGTCA --adapter_sequence_r2 AGATCGGAAGAGCGTCGTGTAGGGAAAGAGTGT
+        zcat ${sample_name}_merged.fastq.gz ${sample_name}_unpaired.fastq.gz | pigz -p 28 > ${sample_name}_trimmed.fastq.gz
         """
 }
 

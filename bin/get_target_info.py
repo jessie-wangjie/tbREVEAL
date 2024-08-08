@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 
 import argparse
+import subprocess
 from Bio import SeqIO
 from Bio.Seq import Seq
 from Bio.SeqRecord import SeqRecord
@@ -9,6 +10,7 @@ from utils.base import *
 import subprocess
 import sys
 from pathlib import Path
+import re
 
 def reverse_complement(seq):
     complement = {'A': 'T', 'C': 'G', 'G': 'C', 'T': 'A','N':'N'}
@@ -138,12 +140,9 @@ def get_target_info(cosmic_info,gtex_info,attp_name,reference_path,cargo_fasta, 
     updated_records = []
 
     for index, row in df.iterrows():
-        if ',' in row['Target']:
-            pair_ids = row['Target'].split(',')
-        elif ';' in row['Target']:
-            pair_ids = row['Target'].split(';')
-        else:
-            pair_ids = row['Target'].split(' ')
+
+        id = row['Target']
+        pair_ids = re.split(';|,', id)
 
         for pair_id in pair_ids:
             if 'CAS' in pair_id:
