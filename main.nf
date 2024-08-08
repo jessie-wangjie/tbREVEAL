@@ -448,8 +448,8 @@ process CREATE_QUILT_PACKAGE {
 
 process TRANSLOCATION_DETECTION {
     cache 'lenient'
-    publishDir "${params.outdir}/translocation/", pattern:'*.svpileup.*'
-
+    publishDir "${params.outdir}/translocation/", pattern:'*.svpileup.bam'
+    publishDir "${params.outdir}/translocation/", pattern:'*.svpileup.txt'
     input:
         tuple val(sample_name), val(group), path(target_info), path(bam_file), path(bam_file_index)
         val benchling_warehouse_username
