@@ -75,49 +75,53 @@ process DOWNLOAD_READS {
 
 process DOWNLOAD_REFERENCE_GENOME {
     input:
-        val reference_species
+        tuple val(reference_species), val(cargo_name)
         val aws_access_key_id
         val aws_secret_access_key
+        val benchling_warehouse_username
+        val benchling_warehouse_password
+        val benchling_warehouse_url
+        val benchling_sdk_api_key
+        val benchling_api_url
     output:
-        path("*.{fa,fna,fasta}"), emit: reference_fasta
-        path("*.{fa,fna,fasta}.*"), emit: reference_index
+        tuple val(reference_species), val(cargo_name), path("${ref_name}_${cargo_name}/${ref_name}_${cargo_name}.fa"), path("${ref_name}_${cargo_name}/${ref_name}_${cargo_name}.fa.*"), path("cargo.fasta"), emit: reference_fasta
     script:
 
     if (reference_species == "Human" || reference_species == "Homo sapiens") {
-        species_reference_fasta_path = 's3://tomebfx-data/references/hg38_no_alts/hg38_no_alts.fa'
-        species_reference_amb_path = 's3://tomebfx-data/references/hg38_no_alts/hg38_no_alts.fa.amb'
-        species_reference_ann_path = 's3://tomebfx-data/references/hg38_no_alts/hg38_no_alts.fa.ann'
-        species_reference_bwt_path = 's3://tomebfx-data/references/hg38_no_alts/hg38_no_alts.fa.bwt'
-        species_reference_fai_path = 's3://tomebfx-data/references/hg38_no_alts/hg38_no_alts.fa.fai'
-        species_reference_pac_path = 's3://tomebfx-data/references/hg38_no_alts/hg38_no_alts.fa.pac'
-        species_reference_sa_path = 's3://tomebfx-data/references/hg38_no_alts/hg38_no_alts.fa.sa'
+        ref_name = "hg38"
     } else if (reference_species == "Mouse" || reference_species == "Mus musculus") {
-        species_reference_fasta_path = 's3://tomebfx-data/references/mm39_and_rosa26_and_F9_insert/mm39_and_rosa26_and_F9_insert.fasta'
-        species_reference_amb_path = 's3://tomebfx-data/references/mm39_and_rosa26_and_F9_insert/mm39_and_rosa26_and_F9_insert.fasta.amb'
-        species_reference_ann_path = 's3://tomebfx-data/references/mm39_and_rosa26_and_F9_insert/mm39_and_rosa26_and_F9_insert.fasta.ann'
-        species_reference_bwt_path = 's3://tomebfx-data/references/mm39_and_rosa26_and_F9_insert/mm39_and_rosa26_and_F9_insert.fasta.bwt'
-        species_reference_fai_path = 's3://tomebfx-data/references/mm39_and_rosa26_and_F9_insert/mm39_and_rosa26_and_F9_insert.fasta.fai'
-        species_reference_pac_path = 's3://tomebfx-data/references/mm39_and_rosa26_and_F9_insert/mm39_and_rosa26_and_F9_insert.fasta.pac'
-        species_reference_sa_path = 's3://tomebfx-data/references/mm39_and_rosa26_and_F9_insert/mm39_and_rosa26_and_F9_insert.fasta.sa'
+        ref_name = "mm39"
     } else if (reference_species == "Monkey" || reference_species == "Macaca fascicularis" || reference_species == "NHP") {
-        species_reference_fasta_path = 's3://tomebfx-data/references/Macaca_fascicularis_6/GCA_011100615.1_Macaca_fascicularis_6.0_genomic.fna'
-        species_reference_amb_path = 's3://tomebfx-data/references/Macaca_fascicularis_6/GCA_011100615.1_Macaca_fascicularis_6.0_genomic.fna.amb'
-        species_reference_ann_path = 's3://tomebfx-data/references/Macaca_fascicularis_6/GCA_011100615.1_Macaca_fascicularis_6.0_genomic.fna.ann'
-        species_reference_bwt_path = 's3://tomebfx-data/references/Macaca_fascicularis_6/GCA_011100615.1_Macaca_fascicularis_6.0_genomic.fna.bwt'
-        species_reference_fai_path = 's3://tomebfx-data/references/Macaca_fascicularis_6/GCA_011100615.1_Macaca_fascicularis_6.0_genomic.fna.fai'
-        species_reference_pac_path = 's3://tomebfx-data/references/Macaca_fascicularis_6/GCA_011100615.1_Macaca_fascicularis_6.0_genomic.fna.pac'
-        species_reference_sa_path = 's3://tomebfx-data/references/Macaca_fascicularis_6/GCA_011100615.1_Macaca_fascicularis_6.0_genomic.fna.sa'
+        ref_name = "macFas6"
     }
+
     """
+
+    export WAREHOUSE_USERNAME='${benchling_warehouse_username}'
+    export WAREHOUSE_PASSWORD='${benchling_warehouse_password}'
+    export WAREHOUSE_URL='${benchling_warehouse_url}'
+    export API_KEY='${benchling_sdk_api_key}'
+    export API_URL='${benchling_api_url}'
+
+    get_cargo_seq.py --cargo ${cargo_name}
+
     aws configure set aws_access_key_id ${aws_access_key_id}
     aws configure set aws_secret_access_key ${aws_secret_access_key}
-    aws s3 cp ${species_reference_fasta_path} .
-    aws s3 cp ${species_reference_amb_path} .
-    aws s3 cp ${species_reference_ann_path} .
-    aws s3 cp ${species_reference_bwt_path} .
-    aws s3 cp ${species_reference_fai_path} .
-    aws s3 cp ${species_reference_pac_path} .
-    aws s3 cp ${species_reference_sa_path} .
+    if [[ `aws s3 ls s3://tomebfx-data/references/bwa_index/${ref_name}_${cargo_name}/` != "" ]]
+    then
+        aws s3 sync s3://tomebfx-data/references/bwa_index/${ref_name}_${cargo_name}/ ${ref_name}_${cargo_name}
+    else
+        aws s3 sync s3://tomebfx-data/references/bwa_index/${ref_name}/ ${ref_name}
+        if [[ $cargo_name != "" ]]
+        then
+            ref=`ls ${ref_name}/*.fa`
+            mkdir ${ref_name}_${cargo_name}
+            cat \$ref cargo.fasta > ${ref_name}_${cargo_name}/${ref_name}_${cargo_name}.fa
+            bwa index ${ref_name}_${cargo_name}/${ref_name}_${cargo_name}.fa
+            samtools faidx ${ref_name}_${cargo_name}/${ref_name}_${cargo_name}.fa
+            aws s3 sync ${ref_name}_${cargo_name} s3://tomebfx-data/references/bwa_index/${ref_name}_${cargo_name}/
+        fi
+    fi
     """
 }
 
@@ -125,7 +129,7 @@ process GET_TARGET_INFORMATION {
     cache 'lenient'
     publishDir "${params.outdir}/full_probe_info/${sample_name}/", overwrite: true
     input:
-        tuple val(sample_name), val(species), path(R1), path(R2), val(attb_name), val(attp_name), val(umi_type), val(probes_name), val(cargo), val(group), path(reference_genome), path(reference_index)
+        tuple val(sample_name), val(group), path(R1), path(R2), val(attb_name), val(attp_name), val(umi_type), val(probes_name), val(cargo), path(reference_genome), path(reference_index), path(cargo_fasta)
         path cosmic_info
         path gtex_info
         val benchling_warehouse_username
@@ -136,7 +140,6 @@ process GET_TARGET_INFORMATION {
 
     output:
         tuple val(sample_name), val(group), path("${sample_name}_target_info.csv"), emit: target_info
-        tuple val(sample_name), val(group), val(cargo), path("cargo.fasta"), emit: cargo_reference
 
     script:
         """
@@ -145,36 +148,10 @@ process GET_TARGET_INFORMATION {
         export WAREHOUSE_URL='${benchling_warehouse_url}'
         export API_KEY='${benchling_sdk_api_key}'
         export API_URL='${benchling_api_url}'
-        get_target_info.py --probes_name "${probes_name}" --cosmic_info "${cosmic_info}" --gtex_info "${gtex_info}" --attp_name "${attp_name}" --reference "${reference_genome}" --cargo "${cargo}" --sample_name "${sample_name}"
+        get_target_info.py --probes_name "${probes_name}" --cosmic_info "${cosmic_info}" --gtex_info "${gtex_info}" --attp_name "${attp_name}" --reference "${reference_genome}" --cargo "${cargo_fasta}" --sample_name "${sample_name}"
         """
 }
 
-process GENERATE_REFERENCE_CARGO_GENOME {
-    cache 'lenient'
-    input:
-        tuple val(cargo_name), path(cargo_fasta)
-        path reference_fasta
-        val benchling_warehouse_username
-        val benchling_warehouse_password
-        val benchling_warehouse_url
-        val benchling_sdk_api_key
-        val benchling_api_url
-    output:
-        tuple val(cargo_name), path("ref_*.fa"), emit: reference_fasta
-        tuple val(cargo_name), path("*.{fa,fna,fasta}.*"), emit: reference_index
-
-    script:
-    """
-    export WAREHOUSE_USERNAME='${benchling_warehouse_username}'
-    export WAREHOUSE_PASSWORD='${benchling_warehouse_password}'
-    export WAREHOUSE_URL='${benchling_warehouse_url}'
-    export API_KEY='${benchling_sdk_api_key}'
-    export API_URL='${benchling_api_url}'
-    cat ${reference_fasta} ${cargo_fasta} > ref_${cargo_name}.fa
-    bwa index ref_${cargo_name}.fa
-    samtools faidx ref_${cargo_name}.fa
-    """
-}
 
 process ADAPTER_AND_POLY_G_TRIM {
     cache 'lenient'
@@ -223,9 +200,10 @@ process ALIGN_READS {
     maxForks 12
     publishDir "${params.outdir}/initial_alignments/${sample_name}/", pattern: '*_initial_alignment.bam*', overwrite: true
     publishDir "${params.outdir}/deduped_alignments/${sample_name}/", pattern: '*_deduped_alignment.bam*', overwrite: true
+    publishDir "${params.outdir}/deduped_alignments/${sample_name}/", pattern:'*.mark_duplicates.txt', overwrite: true
 
     input:
-        tuple val(sample_name), val(group), val(umi_type), path(merged_fastq), path(unmerged_r1), path(unmerged_r2), val(cargo), path(genome_reference), path(reference_index)
+        tuple val(sample_name), val(group), val(umi_type), path(merged_fastq), path(unmerged_r1), path(unmerged_r2), path(genome_reference), path(reference_index)
         val initial_mapper
     output:
         tuple val(sample_name), val(group), path("${sample_name}_initial_alignment.bam"), path("${sample_name}_initial_alignment.bam.bai"), emit: original_alignment_bam
@@ -245,20 +223,26 @@ process ALIGN_READS {
         """
         # align single-end reads
         $alignment_command ${merged_fastq} > ${sample_name}_merged.sam
-        samtools sort ${sample_name}_merged.sam -@ 16 -o ${sample_name}_merged.bam
+        samtools view ${sample_name}_merged.sam -H > tmp.sam
+        samtools view ${sample_name}_merged.sam | sed -e 's/_/-/' >> tmp.sam
+        fgbio CopyUmiFromReadName --input tmp.sam --output ${sample_name}.umi_from_read_name.merged.bam --remove-umi true
+        picard MarkDuplicates --INPUT ${sample_name}.umi_from_read_name.merged.bam --OUTPUT ${sample_name}.dedup.se.bam --METRICS_FILE ${sample_name}.mark_duplicates.se.txt --BARCODE_TAG RX --ASSUME_SORT_ORDER queryname --REMOVE_DUPLICATES true
+
         # align paired-end
         $alignment_command ${unmerged_r1} ${unmerged_r2} > ${sample_name}_unmerged.sam
-        samtools sort ${sample_name}_unmerged.sam -@ 16 -o ${sample_name}_unmerged.bam
+        samtools view ${sample_name}_unmerged.sam -H > tmp.sam
+        samtools view ${sample_name}_unmerged.sam | sed -e 's/_/-/' >> tmp.sam
+        fgbio CopyUmiFromReadName --input tmp.sam --output ${sample_name}.umi_from_read_name.unmerged.bam --remove-umi true
+        picard MarkDuplicates --INPUT ${sample_name}.umi_from_read_name.unmerged.bam --OUTPUT ${sample_name}.dedup.pe.bam --METRICS_FILE ${sample_name}.mark_duplicates.pe.txt --BARCODE_TAG RX --DUPLEX_UMI true --ASSUME_SORT_ORDER queryname --REMOVE_DUPLICATES true
 
         # merge
-        samtools merge ${sample_name}_merged.bam ${sample_name}_unmerged.bam -o ${sample_name}_initial_alignment.bam
+        samtools merge ${sample_name}.umi_from_read_name.merged.bam ${sample_name}.umi_from_read_name.unmerged.bam -n -o - | samtools sort - -o ${sample_name}_initial_alignment.bam
         samtools index ${sample_name}_initial_alignment.bam
 
-        # dedup in single-end mode
-        umi_tools dedup -I ${sample_name}_initial_alignment.bam --umi-separator ":" -S ${sample_name}_deduped_alignment.bam --method unique
+        samtools merge ${sample_name}.dedup.se.bam ${sample_name}.dedup.pe.bam -n -o - |  samtools sort - -o ${sample_name}_deduped_alignment.bam
         samtools index ${sample_name}_deduped_alignment.bam
 
-        rm *.sam *_merged.bam *_unmerged.bam
+        rm *.sam *.umi_from_read_name.* *.dedup.*
         """
     } else {
         """
@@ -435,8 +419,8 @@ process CREATE_QUILT_PACKAGE {
     input:
         val output_folder
         path notebook_report
-        path cas_bed
-        path alignment_viz
+        val cas_bed
+        val alignment_viz
         val project_id
         val bucket_name
         val quilt_output
@@ -464,61 +448,32 @@ process CREATE_QUILT_PACKAGE {
 
 process TRANSLOCATION_DETECTION {
     cache 'lenient'
-    publishDir "${params.outdir}/deduped_alignments/${sample_name}/", pattern:'*.dedup.ba*'
-    publishDir "${params.outdir}/deduped_alignments/${sample_name}/", pattern:'*.mark_duplicates.txt'
     publishDir "${params.outdir}/translocation/", pattern:'*.svpileup.*'
 
     input:
-        tuple val(sample_name), val(group), path(target_info), val(cargo_name), path(reference_genome), path(reference_index), path(bam_file), path(bam_file_index)
+        tuple val(sample_name), val(group), path(target_info), path(bam_file), path(bam_file_index)
+        val benchling_warehouse_username
+        val benchling_warehouse_password
+        val benchling_warehouse_url
+        val benchling_sdk_api_key
+        val benchling_api_url
 
     output:
-        tuple val(sample_name), val(group), val(cargo_name), path("*.svpileup.txt"), emit: bnd
-        file "*.svpileup.bam"
-        // file "*.dedup.ba*"
-        // file "*.mark_duplicates.txt"
+        tuple val(sample_name), val(group), path("*.svpileup.txt"), emit: bnd
 
     script:
     """
-    # copy umi from read name
-    samtools view ${bam_file} -H > tmp.sam
-    samtools view ${bam_file} | sed -e 's/_/-/' >> tmp.sam
-    fgbio -Dsamjdk.use_async_io_read_samtools=true CopyUmiFromReadName --input tmp.sam --output ${sample_name}.umi_from_read_name.bam
-
-    # mark duplicates
-    # picard -Dsamjdk.use_async_io_read_samtools=true -Duse_async_io_write_samtools=true MarkDuplicates --INPUT ${sample_name}.umi_from_read_name.bam --OUTPUT ${sample_name}.dedup.bam --METRICS_FILE ${sample_name}.mark_duplicates.txt --CREATE_INDEX --BARCODE_TAG RX --DUPLEX_UMI true
-
+    export WAREHOUSE_USERNAME='${benchling_warehouse_username}'
+    export WAREHOUSE_PASSWORD='${benchling_warehouse_password}'
+    export WAREHOUSE_URL='${benchling_warehouse_url}'
+    export API_KEY='${benchling_sdk_api_key}'
+    export API_URL='${benchling_api_url}'
+    export TMP_DIR=.
     # Collates a pileup of sv supporting reads.
-    fgsv -Dsamjdk.use_async_io_read_samtools=true SvPileup --input=${sample_name}.umi_from_read_name.bam --output=${sample_name}.svpileup
+    fgsv SvPileup --input=${bam_file} --output=${sample_name}.svpileup
 
-    # rm tmp.sam *.umi_from_read_name.ba*
-    rm tmp.sam
-    """
-}
-
-process INTERSECT_CAS_DATABASE {
-    publishDir "${params.outdir}/translocation/", overwrite: true
-
-    input:
-        tuple val(sample_name), val(group), path(target_info), val(cargo_name), path(bnd_file)
-
-    output:
-        path '*.cas.bed', emit: cas_bed
-        path '*.cargo.cas.csv', emit: cargo_cas_bed
-
-    script:
-    """
-    cut -f1 -d "," $target_info | grep -v id | sort -u > CAS.list
+    cut -f1 -d "," ${target_info} | grep -v id | sort -u > CAS.list
     get_cas_info.py --cas CAS.list | sort -k1,1 -k2,2n | bedtools groupby -g 1,2,3 -c 4 -o distinct -delim "_" > CAS.cut.bed
-    grep -v id ${bnd_file} | awk -F "\\t" '{OFS="\\t"; print \$2,\$3-1,\$3,\$1,\$8,\$9"\\n"\$5,\$6-1,\$6,\$1,\$8,\$9}' | sort -k1,1 -k2,2n | bedtools closest -a stdin -b CAS.cut.bed -d -nonamecheck | awk -F "\\t" '{OFS="\\t"; if(\$11<=5 && \$11>=0) print}' | sort -k4n > ${sample_name}.bnd.cas.bed
-
-    grep -v id ${bnd_file} | grep ${cargo_name} | awk -F "\\t" '{OFS="\\t"; print \$2,\$3-1,\$3,\$1,\$8,\$9"\\n"\$5,\$6-1,\$6,\$1,\$8,\$9}' | sort -k1,1 -k2,2n | bedtools closest -a stdin -b CAS.cut.bed -d -nonamecheck | awk -F "\\t" '{OFS="\\t"; if(\$11>0 && \$11<=100) print }' > tmp
-    if [ -s tmp ]
-    then
-         sort -k10 tmp | bedtools groupby -g 10 -c 4 -o count > ${sample_name}.cargo.cas.csv
-    else
-         touch ${sample_name}.cargo.cas.csv
-    fi
-
     """
 }
 
@@ -575,38 +530,26 @@ workflow {
     }
     .set { input_ch }
 
-    input_ch.map { tuple -> tuple[1] }  // Select the second element from each tuple
+    input_ch.map { [it[1], it[8]] }  // Select the second element from each tuple
         .unique()                   // Remove duplicates to get unique items
         .set {unique_species_ch}                     // Print the unique items
 
-    reference_genome = DOWNLOAD_REFERENCE_GENOME(unique_species_ch,params.AWS_ACCESS_KEY_ID,params.AWS_SECRET_ACCESS_KEY)
+    // generate ref and cargo reference
+    reference_genome = DOWNLOAD_REFERENCE_GENOME(unique_species_ch,params.AWS_ACCESS_KEY_ID,params.AWS_SECRET_ACCESS_KEY,params.BENCHLING_WAREHOUSE_USERNAME,params.BENCHLING_WAREHOUSE_PASSWORD,params.BENCHLING_WAREHOUSE_URL,params.BENCHLING_API_KEY,params.BENCHLING_API_URL)
     gtex_data = DOWNLOAD_GTEX_DATA()
-    trimmed_and_merged_fastq = ADAPTER_AND_POLY_G_TRIM(input_ch)
 
     input_ch
-        .combine(reference_genome.reference_fasta)
-        .combine(reference_genome.reference_index.toList())
+        .map { [it[1], it[8], it[0], it[2], it[3], it[4], it[5], it[6], it[7], it[9]] }
+        .combine(reference_genome.reference_fasta, by: [0,1])
+        .map { [it[2], it[9], it[3], it[4], it[5], it[6], it[7], it[8], it[1], it[10], it[11], it[12]] }
         .set{probe_info_input_ch}
     probe_information = GET_TARGET_INFORMATION(probe_info_input_ch,params.cosmic_info,gtex_data,params.BENCHLING_WAREHOUSE_USERNAME,params.BENCHLING_WAREHOUSE_PASSWORD,params.BENCHLING_WAREHOUSE_URL,params.BENCHLING_API_KEY,params.BENCHLING_API_URL)
 
     amplicon_files = GENERATE_AMPLICONS(probe_information.target_info)
 
-    // generate ref and cargo reference
-    probe_information.cargo_reference.map { it[2] }
-        .unique()
-        .join(probe_information.cargo_reference.map { [it[2],it[3]] } )
-        .set { cargo_ch }
-    reference_cargo_genome = GENERATE_REFERENCE_CARGO_GENOME(cargo_ch, reference_genome.reference_fasta,params.BENCHLING_WAREHOUSE_USERNAME,params.BENCHLING_WAREHOUSE_PASSWORD,params.BENCHLING_WAREHOUSE_URL,params.BENCHLING_API_KEY,params.BENCHLING_API_URL)
-
-    probe_information.cargo_reference
-        .map { [it[2], it[0], it[1]] }
-        .combine(reference_cargo_genome.reference_fasta, by:[0])
-        .combine(reference_cargo_genome.reference_index, by:[0])
-        .map { [it[1], it[2], it[0], it[3], it[4]]}
-        .set { ref_ch }
-
+    trimmed_and_merged_fastq = ADAPTER_AND_POLY_G_TRIM(input_ch)
     trimmed_and_merged_fastq.trimmed_fastq
-        .combine(ref_ch, by:[0,1])
+        .combine(probe_info_input_ch.map { [it[0], it[1], it[9], it[10]]}, by:[0,1])
         .set{align_reads_input_ch}
     initial_alignment = ALIGN_READS(align_reads_input_ch, params.initial_mapper)
 
@@ -652,8 +595,6 @@ workflow {
         .collect()
         .set{integration_stats_files_ch}
 
-    integration_stats_files_ch.view()
-
     extract_target_reads_out.read_counts_per_site_file
         .collect(flat:false)
         .flatMap{ it }
@@ -687,22 +628,11 @@ workflow {
     MULTIQC(multiqc_input_ch)
 
     // ** TRANSLOCATION DETECTION **
-    probe_information.target_info
-        .combine(ref_ch, by: [0,1])
-        .combine(initial_alignment.original_alignment_bam, by: [0,1])
-        .set{translocation_detection_input_ch}
-    TRANSLOCATION_DETECTION(translocation_detection_input_ch)
-
-    probe_information.target_info
-        .combine(TRANSLOCATION_DETECTION.out.bnd, by: [0,1])
-        .set{target_info_and_bnd_ch}
-    intersect_cas_database_out = INTERSECT_CAS_DATABASE(target_info_and_bnd_ch)
-
+    translocation=TRANSLOCATION_DETECTION(target_info_and_deduped_alignment_ch,params.BENCHLING_WAREHOUSE_USERNAME,params.BENCHLING_WAREHOUSE_PASSWORD,params.BENCHLING_WAREHOUSE_URL,params.BENCHLING_API_KEY,params.BENCHLING_API_URL )
 
     // ** CREATE HTML REPORT **
-
     html_report = CREATE_PYTHON_NOTEBOOK_REPORT(report_excel_file, params.notebook_template)
 
-    CREATE_QUILT_PACKAGE(params.outdir,html_report,intersect_cas_database_out.cas_bed.collect(),alignment_viz_output.alignment_viz_html.collect(),params.project_id,params.bucket_name,params.quilt_package_name,params.BENCHLING_WAREHOUSE_USERNAME,params.BENCHLING_WAREHOUSE_PASSWORD,params.BENCHLING_WAREHOUSE_URL,params.BENCHLING_API_KEY,params.BENCHLING_API_URL,params.AWS_ACCESS_KEY_ID,params.AWS_SECRET_ACCESS_KEY)
+    CREATE_QUILT_PACKAGE(params.outdir,html_report,translocation.bnd.collect(),alignment_viz_output.alignment_viz_html.collect(),params.project_id,params.bucket_name,params.quilt_package_name,params.BENCHLING_WAREHOUSE_USERNAME,params.BENCHLING_WAREHOUSE_PASSWORD,params.BENCHLING_WAREHOUSE_URL,params.BENCHLING_API_KEY,params.BENCHLING_API_URL,params.AWS_ACCESS_KEY_ID,params.AWS_SECRET_ACCESS_KEY)
 
 }

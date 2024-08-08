@@ -19,6 +19,7 @@ def get_project_info(project_id):
     metadata_query_result = cur.fetchall()
     sample_info = {}
     for result in metadata_query_result:
+
         sample_name, sequencing_sample_name,attb, attp, primers, hybrid_capture_panel, umi_type, species, probes_or_barcodes, donor, group = result
 
         R1, R2 = None, None  # Initialize R1 and R2 for each sample_name

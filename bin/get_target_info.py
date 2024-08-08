@@ -5,12 +5,10 @@ import subprocess
 from Bio import SeqIO
 from Bio.Seq import Seq
 from Bio.SeqRecord import SeqRecord
-from collections import defaultdict
 import pandas as pd
 from utils.base import *
 import subprocess
 import sys
-import psycopg2
 from pathlib import Path
 import re
 
@@ -52,7 +50,6 @@ def download_probes_file(probes_name):
 
     if probes_query_result is not None:
         probe_bed_file_download_blob_id = probes_query_result[0]['url'].split('/')[-1]
-        probe_bed_file_download_name = (probes_query_result[0]['name'])
         benchling = Benchling(url="https://tome.benchling.com", auth_method=ApiKeyAuth(api_key))
         benchling.blobs.download_file(blob_id=probe_bed_file_download_blob_id,destination_path=Path(f'probes.bed'))
         print('Probes downloaded to probes.bed')
@@ -76,8 +73,6 @@ def download_probes_file(probes_name):
                 '''
         cur.execute(query, [probes_name])
         atg_id,chromosome,start,end = cur.fetchone()
-        # Specifying the order
-        order = ["chromosome", "start", "end", "atg_id"]
 
         # File path
         file_path = "probes.bed"
@@ -113,10 +108,9 @@ def download_cargo_genome(cargo_id):
     print('Wrote cargo sequence to cargo.fasta')
     return('cargo.fasta')
 
-def get_target_info(cosmic_info,gtex_info,attp_name,reference_path,cargo_id, sample_name, probes_name):
+def get_target_info(cosmic_info,gtex_info,attp_name,reference_path,cargo_fasta, sample_name, probes_name):
 
     attp_reg_seq,attp_prime_seq = get_attp_info(attp_name)
-    cargo_fn = download_cargo_genome(cargo_id)
     probes_fn = download_probes_file(probes_name)
 
     ids = []
@@ -214,7 +208,6 @@ def get_target_info(cosmic_info,gtex_info,attp_name,reference_path,cargo_id, sam
         id = row['Target']
         # OT are Cas9 mediated off-targets
         if 'OT' in id:
-            target = updated_df[updated_df.Target == id]['Target'].iloc[0]
             chr = updated_df[updated_df.Target == id]['Chromosome'].iloc[0]
             start = updated_df[updated_df.Target == id]['Start'].iloc[0]
             end = updated_df[updated_df.Target == id]['Stop'].iloc[0]
@@ -272,11 +265,9 @@ def get_target_info(cosmic_info,gtex_info,attp_name,reference_path,cargo_id, sam
             same_strands.append('True')
 
         elif 'AA' in id:
-            target = updated_df[updated_df.Target == id]['Target'].iloc[0]
             chr = updated_df[updated_df.Target == id]['Chromosome'].iloc[0]
             start = updated_df[updated_df.Target == id]['Start'].iloc[0]
             end = updated_df[updated_df.Target == id]['Stop'].iloc[0]
-            strand = updated_df[updated_df.Target == id]['Strand'].iloc[0]
 
             if '_' in chr:
                 continue
@@ -332,7 +323,7 @@ def get_target_info(cosmic_info,gtex_info,attp_name,reference_path,cargo_id, sam
                 attR = (attp_reg_seq + b_prime_sequence + reverse_complement(beacon_beginning_sequence)).upper()
 
             # store cargo sequence so we can search for subsequence locations
-            with open('cargo.fasta', 'r') as f:
+            with open(cargo_fasta, 'r') as f:
                 cargo_sequence = ''.join(line.strip() for line in f if not line.startswith('>')).upper()
 
             cargo_pprime_end_loc = cargo_sequence.find(attp_prime_seq) + len(attp_prime_seq)
@@ -396,7 +387,6 @@ def get_target_info(cosmic_info,gtex_info,attp_name,reference_path,cargo_id, sam
             same_strands.append('True')
 
         elif 'CAS' in id:
-            target = updated_df[updated_df.Target == id]['Target'].iloc[0]
             chr = updated_df[updated_df.Target == id]['Chromosome'].iloc[0]
             start = updated_df[updated_df.Target == id]['Start'].iloc[0]
             end = updated_df[updated_df.Target == id]['Stop'].iloc[0]
@@ -582,5 +572,6 @@ if __name__ == "__main__":
     # Parse the arguments
     args = parser.parse_args()
 
-    get_target_info(args.cosmic_info, args.gtex_info, args.attp_name, args.reference, args.cargo, args.sample_name, args.probes_name)
+    get_target_info(args.cosmic_info, args.gtex_info, args.attp_name, args.reference, args.cargo, args.sample_name,
+                    args.probes_name)
 
