@@ -26,7 +26,7 @@ def extract_reads(target_info, bam_file, window, sample_name):
 
         print('Extracting reads for ' + id + '...')
 
-        command = f'samtools view {bam_file} {chromosome}:{start}-{end} -b | samtools fastq -N - > {sample_name}_{id}.fastq'
+        command = f'samtools view {bam_file} {chromosome}:{start}-{end} -b -P | samtools fastq -N - -F256 > {sample_name}_{id}.fastq'
         subprocess.run(command, shell=True)
 
         # Count the number of reads in the fastq file using Biopython's SeqIO

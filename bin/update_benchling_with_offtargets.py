@@ -16,7 +16,10 @@ def add_sites(project_id, integration_csv_fn):
         if 'CAS' not in cas_id:
             continue
         entity = benchling.dna_sequences.list(name=cas_id)
-        cas_info = entity.first()
+        try:
+            cas_info = entity.first()
+        except:
+            continue
 
         curr_site_validated_project_ids = cas_info.fields['validation tracking id list'].value
         cas_id_raw = cas_info.id
@@ -36,8 +39,10 @@ def add_sites(project_id, integration_csv_fn):
                 "validation tracking id list": {"value": update_value_string}
                 })
             )
-            benchling.dna_sequences.update(dna_sequence_id=cas_id_raw, dna_sequence=entityToUpdate)
-
+            try:
+                benchling.dna_sequences.update(dna_sequence_id=cas_id_raw, dna_sequence=entityToUpdate)
+            except:
+                continue
 
 if __name__ == "__main__":
     # Create the parser
